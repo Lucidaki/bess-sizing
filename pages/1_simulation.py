@@ -6,11 +6,6 @@ Run battery sizing simulations and view results
 import streamlit as st
 import pandas as pd
 import numpy as np
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.data_loader import load_solar_profile, get_solar_statistics
 from src.battery_simulator import simulate_bess_year

@@ -39,19 +39,21 @@ Visualization: Plotly 5.0+
 BESS-22-nov/
 │
 ├── app.py                     # Main application entry point
-├── requirements.txt           # Python dependencies
+├── setup.py                   # Python package configuration (enables proper imports)
+├── requirements.txt           # Python dependencies (includes -e . for package install)
 ├── PROJECT_PLAN.md           # This document
 │
-├── src/                      # Core business logic
+├── src/                      # Core business logic (installed as package)
 │   ├── __init__.py
 │   ├── config.py            # Default configuration constants
 │   ├── battery_simulator.py # Battery operation simulation engine
 │   └── data_loader.py       # Solar profile data management
 │
-├── utils/                    # Utility functions
+├── utils/                    # Utility functions (installed as package)
 │   ├── __init__.py
 │   ├── metrics.py           # Metrics calculation and analysis
-│   └── config_manager.py   # Configuration state management
+│   ├── config_manager.py   # Configuration state management
+│   └── validators.py        # Configuration validation utilities
 │
 ├── pages/                    # Streamlit multipage app
 │   ├── 0_configurations.py  # Configuration management page
@@ -63,6 +65,12 @@ BESS-22-nov/
     └── Solar Profile.csv     # Hourly solar generation data
 
 ```
+
+**Package Structure Notes:**
+- `setup.py` defines the project as a proper Python package
+- `src/` and `utils/` are installed as importable packages
+- All pages can import from `src` and `utils` naturally (no sys.path manipulation)
+- Compatible with both local development and cloud deployment
 
 ---
 
@@ -242,12 +250,26 @@ Charge Headroom = (95% - SOC) × Capacity
 git clone [repository-url]
 cd "BESS 22 nov"
 
-# Install dependencies
+# Install dependencies and project as package
+# Note: This installs all dependencies AND the project itself as an editable package
+# This enables proper Python imports without sys.path manipulation
 pip install -r requirements.txt
 
 # Run application
 streamlit run app.py
 ```
+
+**Note on Package Installation:**
+The project uses a proper Python package structure with `setup.py`. When you run `pip install -r requirements.txt`, it:
+1. Installs all required dependencies (streamlit, pandas, numpy, plotly)
+2. Installs the project itself as an editable package (via `-e .` in requirements.txt)
+3. Makes all imports work naturally without sys.path manipulation
+
+This approach:
+- ✅ Works seamlessly on local development
+- ✅ Works on Streamlit Cloud deployment
+- ✅ Follows Python packaging best practices
+- ✅ Enables proper testing and distribution
 
 ### Workflow
 

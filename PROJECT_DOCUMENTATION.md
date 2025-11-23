@@ -631,28 +631,36 @@ The application uses Streamlit's multi-page architecture with a main entry point
 
 ```
 bess-sizing/
-├── main.py                    # Main entry point (home page)
+├── app.py                     # Main entry point (Streamlit app)
+├── setup.py                   # Python package configuration (NEW - Bug #11 fix)
+├── requirements.txt           # Python dependencies (includes -e . for package install)
 ├── pages/
 │   ├── 0_configurations.py    # Configuration management page
 │   ├── 1_simulation.py        # Single simulation and optimization page
 │   ├── 2_calculation_logic.py # Algorithm documentation page
 │   └── 3_optimization.py      # Advanced optimization analysis page
-├── src/
+├── src/                       # Core business logic (installed as package)
 │   ├── __init__.py
 │   ├── config.py              # Default configuration constants
 │   ├── battery_simulator.py  # Core simulation engine
 │   └── data_loader.py         # Solar profile loading
-├── utils/
+├── utils/                     # Utility functions (installed as package)
 │   ├── __init__.py
 │   ├── config_manager.py      # Session state configuration
 │   ├── metrics.py             # Metrics calculation
 │   └── validators.py          # Input validation (NEW - Bug #6 fix)
 ├── .streamlit/
 │   └── config.toml            # Streamlit configuration
-├── Inputs/
-│   └── Solar Profile.csv      # Default solar data
-└── requirements.txt           # Python dependencies
+└── Inputs/
+    └── Solar Profile.csv      # Default solar data
 ```
+
+**Package Structure (Bug #11 Fix):**
+The project now uses proper Python packaging with `setup.py`, eliminating the need for `sys.path` manipulation. When you run `pip install -r requirements.txt`, it:
+- Installs all dependencies (streamlit, pandas, numpy, plotly)
+- Installs the project itself as an editable package via `-e .`
+- Enables natural imports: `from src.config import ...` works everywhere
+- Compatible with both local development and Streamlit Cloud deployment
 
 ### Page Responsibilities
 

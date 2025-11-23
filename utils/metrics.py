@@ -4,11 +4,6 @@ Metrics calculation utilities for BESS sizing analysis
 
 import pandas as pd
 import numpy as np
-import sys
-from pathlib import Path
-
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
 
 from src.config import (
     MARGINAL_IMPROVEMENT_THRESHOLD,

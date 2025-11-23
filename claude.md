@@ -80,11 +80,13 @@ Eliminate patterns that consume tokens without advancing implementation:
 
 #### Development
 ```bash
+# Install dependencies and project as package
+# Note: This also installs the project itself via setup.py (using -e . in requirements.txt)
+# This enables proper imports without sys.path manipulation
+pip install -r requirements.txt
+
 # Run Streamlit application
 streamlit run app.py
-
-# Install dependencies
-pip install -r requirements.txt
 
 # Test specific module
 python -m pytest tests/
@@ -128,6 +130,7 @@ streamlit run app.py --server.headless true
   - `3_optimization.py` - Optimization analysis
 - `/tests/` - Unit and integration tests
 - `app.py` - Main application entry point
+- `setup.py` - Python package configuration (for dependency management changes)
 
 **NEVER MODIFY**:
 - `/Inputs/Solar Profile.csv` - Original solar data (copy for modifications)
@@ -138,7 +141,8 @@ streamlit run app.py --server.headless true
 **REFERENCE ONLY**:
 - `PROJECT_PLAN.md` - Comprehensive project documentation
 - `PROJECT_DOCUMENTATION.md` - Additional technical details
-- `requirements.txt` - Dependency specifications
+- `requirements.txt` - Dependency specifications (includes `-e .` for package installation)
+- `setup.py` - Defines project as proper Python package (enables imports without sys.path)
 
 ### Code Style & Architecture Standards
 
