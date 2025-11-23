@@ -1157,7 +1157,7 @@ if len(solar_profile) != 8760:
 
 ### Error Handling
 
-**File Not Found** (Bug #7 Fix - User-Visible Errors):
+**File Not Found** (Bug #7 Enhanced Fix - No Synthetic Fallback):
 ```python
 try:
     df = pd.read_csv(file_path)
@@ -1165,19 +1165,57 @@ try:
 except Exception as e:
     # Show in UI, not just console
     st.error(f"❌ Failed to load solar profile: {str(e)}")
-    st.warning("⚠️ Using synthetic solar profile for demonstration purposes")
-    st.info("📝 To fix: Ensure 'data/solar_profile.csv' exists with 8760 hourly values")
+    st.error("⚠️ Solar profile file is required to run simulations")
+    st.info(f"📝 Please ensure '{SOLAR_PROFILE_PATH}' exists with 8760 hourly values")
+    st.info("📤 Future versions will support uploading custom solar profile files")
 
-    return generate_synthetic_solar_profile()  # Fallback
+    return None  # No synthetic fallback - real data required
 ```
 
-**Benefits**:
-- Users see errors directly in UI
-- Clear guidance on how to fix
-- Graceful degradation with synthetic data
-- Simulation can continue for testing
+**Page-Level Handling** (pages/1_simulation.py, pages/3_optimization.py):
+```python
+solar_profile, solar_stats = get_solar_data()
 
-### Synthetic Solar Profile (Fallback)
+if solar_profile is None:
+    st.error("🚫 **Cannot Run Simulations - Solar Profile Missing**")
+    st.warning("The solar profile file could not be loaded. This file is required to run battery simulations.")
+    st.info("📋 **What to do:**")
+    st.markdown("""
+    1. Ensure `Inputs/Solar Profile.csv` exists in the project directory
+    2. Verify the file contains 8760 hourly solar generation values
+    3. Check file permissions and format
+
+    **Note:** Future versions will support uploading custom solar profile files through the UI.
+    """)
+    st.stop()  # Stop page execution - don't show simulation controls
+```
+
+**Current Behavior**:
+- ❌ **No synthetic data fallback** - real data is required
+- 🛑 Application stops execution if file is missing or invalid
+- ✅ Users see clear error messages directly in UI
+- ✅ Clear guidance on how to fix the issue
+- ✅ Pages stop rendering when solar data unavailable
+- ✅ No confusion from silent fallback to synthetic data
+
+### Future Enhancement: Solar Profile Upload Functionality
+
+**Status**: Planned for future version
+**Priority**: MEDIUM
+**Requirement**: User upload capability when default file is unavailable
+
+**Proposed Implementation**:
+- File upload widget using `st.file_uploader()`
+- Validation of uploaded files (8760 hours, CSV format, no negative values)
+- Session state caching of uploaded profiles
+- Support for various column naming conventions
+- Secure, memory-based uploads (no disk writes)
+- Reusable across all pages in same session
+
+**Current Workaround**:
+Users must ensure `Inputs/Solar Profile.csv` exists and is valid before running the application.
+
+### Synthetic Solar Profile (Deprecated)
 
 **Algorithm** (`src/data_loader.py:generate_synthetic_solar_profile()`):
 ```python

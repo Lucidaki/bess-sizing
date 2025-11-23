@@ -70,23 +70,34 @@ def load_solar_profile(file_path=None):
         try:
             import streamlit as st
             st.error(f"❌ Failed to load solar profile: {str(e)}")
-            st.warning("⚠️ Using synthetic solar profile for demonstration purposes")
-            st.info("📝 To fix: Ensure 'data/solar_profile.csv' exists with 8760 hourly values")
+            st.error("⚠️ Solar profile file is required to run simulations")
+            st.info(f"📝 Please ensure '{SOLAR_PROFILE_PATH}' exists with 8760 hourly values")
+            st.info("📤 Future versions will support uploading custom solar profile files")
         except ImportError:
             # Fallback to console if Streamlit not available (e.g., during testing)
             print(f"Error loading solar profile: {e}")
-            print("Using synthetic solar profile for demonstration purposes")
+            print(f"Solar profile file '{SOLAR_PROFILE_PATH}' is required")
 
-        # Return synthetic profile if file cannot be loaded
-        return generate_synthetic_solar_profile()
+        # Return None - caller must handle missing solar profile
+        return None
 
 def generate_synthetic_solar_profile():
     """
+    ⚠️ DEPRECATED: This function is deprecated and should only be used for unit testing.
+
     Generate a synthetic solar profile for testing purposes.
+    Production code should NOT use this function - real solar data is required.
 
     Returns:
         numpy array: Synthetic hourly solar generation for 8760 hours
     """
+    import warnings
+    warnings.warn(
+        "generate_synthetic_solar_profile() is deprecated. "
+        "Use real solar profile data. This function should only be used in unit tests.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     hours = np.arange(8760)
     days = hours // 24
     hour_of_day = hours % 24

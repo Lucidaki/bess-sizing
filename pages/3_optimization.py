@@ -129,10 +129,26 @@ config = get_config()
 def get_solar_data():
     """Load and cache solar profile data."""
     profile = load_solar_profile()
+    if profile is None:
+        return None, None
     stats = get_solar_statistics(profile)
     return profile, stats
 
 solar_profile, solar_stats = get_solar_data()
+
+# Check if solar profile loaded successfully
+if solar_profile is None:
+    st.error("🚫 **Cannot Run Optimization - Solar Profile Missing**")
+    st.warning("The solar profile file could not be loaded. This file is required to run optimization analysis.")
+    st.info("📋 **What to do:**")
+    st.markdown("""
+    1. Ensure `Inputs/Solar Profile.csv` exists in the project directory
+    2. Verify the file contains 8760 hourly solar generation values
+    3. Check file permissions and format
+
+    **Note:** Future versions will support uploading custom solar profile files through the UI.
+    """)
+    st.stop()  # Stop page execution - don't show optimization controls
 
 # Sidebar controls
 st.sidebar.markdown("### 🎯 Optimization Controls")

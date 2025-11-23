@@ -298,6 +298,64 @@ This approach:
 
 ---
 
+## 📁 Data Requirements
+
+### Solar Profile Data
+
+**Required File:** `Inputs/Solar Profile.csv`
+
+The application **requires** a valid solar profile file to run simulations. This file must contain:
+- **8760 hourly values** (full year of data)
+- **Solar generation in MW** for each hour
+- **CSV format** with recognizable column names (e.g., "Solar_Generation_MW", "solar", "generation", "mw")
+
+**Example Format:**
+```csv
+timestamp,Solar_Generation_MW
+01-01-2024 00:00,0
+01-01-2024 01:00,0
+01-01-2024 06:00,15.2
+01-01-2024 12:00,64.8
+...
+```
+
+**Current Behavior:**
+- ✅ Loads from `Inputs/Solar Profile.csv` by default
+- ❌ **No synthetic data fallback** - real data is required
+- 🛑 Application stops execution if file is missing or invalid
+- ⚠️ Clear error messages displayed to users
+
+**Error Handling:**
+If the solar profile file is missing or cannot be loaded:
+1. User sees clear error message in the UI
+2. Instructions provided on how to fix the issue
+3. Page execution stops - no simulations can run
+4. No silent fallback to synthetic data
+
+### Future Enhancement: Solar Profile Upload
+
+**Status:** Planned for future version
+**Priority:** MEDIUM
+**Requirement:** User upload capability when default file is unavailable
+
+**Proposed Functionality:**
+- File upload widget in Simulation and Optimization pages
+- Validation of uploaded files (8760 hours, valid format, no negative values)
+- Session state caching of uploaded profiles
+- Support for CSV files with various column naming conventions
+- Clear upload instructions and file format requirements
+
+**Implementation Notes:**
+- Will use Streamlit's `st.file_uploader()` for secure, memory-based uploads
+- Uploaded profiles will be validated and cached in session state
+- No disk writes required (security benefit)
+- Reusable across all pages in same session
+
+**Current Workaround:**
+Users must ensure `Inputs/Solar Profile.csv` exists before running the application.
+
+---
+
 ## 🔧 Configuration Details
 
 ### Default Configuration
