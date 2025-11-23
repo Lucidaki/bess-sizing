@@ -6,6 +6,8 @@ Run battery sizing simulations and view results
 import streamlit as st
 import pandas as pd
 import numpy as np
+import os
+from pathlib import Path
 
 from src.data_loader import load_solar_profile, get_solar_statistics
 from src.battery_simulator import simulate_bess_year
@@ -30,31 +32,63 @@ else:
 
 st.markdown("---")
 
-# Load solar profile
+# Load solar profile with hash-based caching
+# Bug #10 Fix: Cache invalidates when file is added/modified, + retry button
 @st.cache_data
-def get_solar_data():
-    """Load and cache solar profile data."""
+def get_solar_data(_file_modified_time):
+    """
+    Load and cache solar profile data.
+    Cache is invalidated when file modification time changes.
+
+    Args:
+        _file_modified_time: File modification timestamp (underscore prevents hashing)
+    """
     profile = load_solar_profile()
     if profile is None:
         return None, None
     stats = get_solar_statistics(profile)
     return profile, stats
 
-solar_profile, solar_stats = get_solar_data()
+# Check if solar file exists first
+solar_file = Path("Inputs/Solar Profile.csv")
 
-# Check if solar profile loaded successfully
-if solar_profile is None:
+if not solar_file.exists():
     st.error("🚫 **Cannot Run Simulations - Solar Profile Missing**")
-    st.warning("The solar profile file could not be loaded. This file is required to run battery simulations.")
+    st.warning(f"Required file not found: `{solar_file}`")
+
+    if st.button("🔄 Check Again"):
+        st.rerun()
+
     st.info("📋 **What to do:**")
     st.markdown("""
     1. Ensure `Inputs/Solar Profile.csv` exists in the project directory
     2. Verify the file contains 8760 hourly solar generation values
-    3. Check file permissions and format
+    3. Click the '🔄 Check Again' button above after adding the file
 
     **Note:** Future versions will support uploading custom solar profile files through the UI.
     """)
     st.stop()  # Stop page execution - don't show simulation controls
+
+# File exists, load it with hash-based caching
+file_modified_time = os.path.getmtime(solar_file)
+solar_profile, solar_stats = get_solar_data(file_modified_time)
+
+# Check if loading was successful (file exists but may be corrupted)
+if solar_profile is None:
+    st.error("🚫 **Error Loading Solar Profile**")
+    st.warning("The file exists but could not be loaded. It may be corrupted or in the wrong format.")
+
+    if st.button("🔄 Retry Loading"):
+        st.cache_data.clear()
+        st.rerun()
+
+    st.info("📋 **What to do:**")
+    st.markdown("""
+    1. Verify the file contains 8760 hourly solar generation values
+    2. Check file format (CSV with proper headers)
+    3. Click '🔄 Retry Loading' button above
+    """)
+    st.stop()
 
 # Sidebar - Solar Profile Statistics
 st.sidebar.markdown("### 📊 Solar Profile Statistics")

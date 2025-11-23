@@ -100,7 +100,19 @@ def find_optimal_battery_size(all_results):
     optimal_size = marginal_improvements[optimal_idx]['size_mwh']
 
     # Get the actual result for optimal size
-    optimal_result = next(r for r in all_results if r['Battery Size (MWh)'] == optimal_size)
+    # Bug #9 Fix: Use default value to prevent StopIteration exception
+    optimal_result = next(
+        (r for r in all_results if r['Battery Size (MWh)'] == optimal_size),
+        None
+    )
+
+    if optimal_result is None:
+        available_sizes = sorted([r['Battery Size (MWh)'] for r in all_results])
+        raise ValueError(
+            f"Optimal size {optimal_size} MWh not found in simulation results. "
+            f"Available sizes: {available_sizes}. "
+            f"This may indicate a bug in the optimization algorithm or configuration mismatch."
+        )
 
     return {
         'optimal_size_mwh': optimal_size,
