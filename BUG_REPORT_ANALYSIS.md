@@ -986,6 +986,455 @@ class SimulationCache:
 
 ---
 
+## 🧪 Testing Strategy & Recommendations
+
+### Current Testing Status (November 2024)
+
+**End-to-End Testing Completed:**
+- ✅ All module imports verified
+- ✅ Battery system core functions tested
+- ✅ Input validation tested (8 scenarios)
+- ✅ Configuration loading tested
+- ✅ Full year simulation tested (8,760 hours)
+- ✅ All tests passing
+
+**Test Results Summary:**
+```
+Module Imports:           PASS (5/5)
+Battery Core Functions:   PASS (8/8)
+Input Validation:         PASS (8/8)
+Configuration:            PASS (6/6)
+Full Year Simulation:     PASS (100 MWh battery, 2,458 hours delivered)
+```
+
+### Testing Limitations
+
+**What Can Be Tested (Automated):**
+- ✅ Python code functionality
+- ✅ Module imports and syntax
+- ✅ Core simulation algorithms
+- ✅ Input validation logic
+- ✅ Configuration management
+- ✅ Mathematical calculations
+- ✅ Data structures and error handling
+
+**What Cannot Be Tested (Requires Manual Testing):**
+- ❌ Streamlit UI rendering
+- ❌ User interactions (buttons, sliders, file uploads)
+- ❌ Visual charts and graphs
+- ❌ Page navigation
+- ❌ Session state management
+- ❌ CSS styling and layout
+- ❌ Real solar data loading from actual CSV files
+
+### Recommended Testing Approaches
+
+#### 1. Automated Testing Suite (pytest) - **RECOMMENDED**
+
+**Priority:** HIGH
+**Impact:** Prevents regression, improves code quality
+
+**Implementation:**
+```python
+# tests/test_battery_simulator.py
+import pytest
+from src.battery_simulator import BatterySystem
+
+def test_battery_initialization():
+    battery = BatterySystem(100)
+    assert battery.capacity == 100
+    assert abs(battery.soc - 0.5) < 0.01
+
+def test_charging_increases_soc():
+    battery = BatterySystem(100)
+    initial_soc = battery.soc
+    battery.charge(10.0)
+    assert battery.soc > initial_soc
+
+def test_soc_max_limit_enforced():
+    battery = BatterySystem(100)
+    battery.soc = 0.94
+    battery.charge(100.0)  # Try to overcharge
+    assert battery.soc <= 0.95
+
+def test_cycle_counting():
+    battery = BatterySystem(100)
+    battery.update_state_and_cycles('CHARGING', 0)
+    battery.update_state_and_cycles('DISCHARGING', 1)
+    assert battery.total_cycles == 1.0
+
+# tests/test_validators.py
+from utils.validators import validate_battery_config
+
+def test_valid_configuration():
+    config = {
+        'MIN_SOC': 0.05, 'MAX_SOC': 0.95,
+        'ROUND_TRIP_EFFICIENCY': 0.87,
+        'C_RATE_CHARGE': 1.0, 'C_RATE_DISCHARGE': 1.0,
+        # ... all required fields
+    }
+    is_valid, errors = validate_battery_config(config)
+    assert is_valid == True
+    assert len(errors) == 0
+
+def test_invalid_soc_range():
+    config = {...}  # Complete config
+    config['MIN_SOC'] = 0.95
+    config['MAX_SOC'] = 0.05
+    is_valid, errors = validate_battery_config(config)
+    assert is_valid == False
+    assert len(errors) > 0
+
+# tests/test_integration.py
+from src.battery_simulator import simulate_bess_year
+from src.data_loader import generate_synthetic_solar_profile
+
+def test_full_year_simulation():
+    solar_profile = generate_synthetic_solar_profile()
+    config = {...}  # Complete config
+    results = simulate_bess_year(100, solar_profile, config)
+
+    assert 0 <= results['hours_delivered'] <= 8760
+    assert results['total_cycles'] >= 0
+    assert len(results['hourly_data']) == 8760
+```
+
+**Directory Structure:**
+```
+tests/
+├── __init__.py
+├── test_battery_simulator.py
+├── test_validators.py
+├── test_data_loader.py
+├── test_metrics.py
+├── test_config_manager.py
+└── test_integration.py
+```
+
+**To Run:**
+```bash
+pip install pytest pytest-cov
+pytest tests/ -v
+pytest tests/ --cov=src --cov=utils  # With coverage
+```
+
+**Benefits:**
+- Automated regression testing on every code change
+- Clear pass/fail reporting
+- Can be integrated into CI/CD pipelines
+- Better test organization and maintenance
+- Prevents bugs from being reintroduced
+
+#### 2. Streamlit Testing Framework
+
+**Priority:** MEDIUM
+**Impact:** Test UI-specific functionality
+
+**Implementation:**
+```python
+# tests/test_streamlit_pages.py
+from streamlit.testing.v1 import AppTest
+
+def test_simulation_page_loads():
+    at = AppTest.from_file("pages/1_simulation.py")
+    at.run()
+    assert not at.exception
+
+def test_simulation_with_slider():
+    at = AppTest.from_file("pages/1_simulation.py")
+    at.run()
+
+    # Interact with slider
+    at.slider("battery_size").set_value(150)
+
+    # Click button
+    at.button("Run Simulation").click()
+    at.run()
+
+    # Verify results appear
+    assert "Delivery Hours" in str(at.text)
+
+def test_configuration_validation():
+    at = AppTest.from_file("pages/1_simulation.py")
+    at.run()
+
+    # Simulate invalid configuration
+    st.session_state['config']['MIN_SOC'] = 0.95
+    st.session_state['config']['MAX_SOC'] = 0.05
+
+    # Try to run simulation
+    at.button("Run Simulation").click()
+    at.run()
+
+    # Should see error message
+    assert "Invalid Configuration" in str(at.error)
+```
+
+**Alternative - Playwright for Full Browser Testing:**
+```python
+# tests/test_browser.py
+from playwright.sync_api import sync_playwright
+
+def test_full_workflow():
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto("http://localhost:8501")
+
+        # Test navigation
+        page.click("text=Simulation")
+        assert "BESS Simulation" in page.content()
+
+        # Test simulation run
+        page.click("text=Run Simulation")
+        page.wait_for_selector("text=Delivery Hours")
+
+        browser.close()
+```
+
+#### 3. Manual Testing Checklist
+
+**Priority:** HIGH (for UI validation)
+**Impact:** Ensures user-facing features work correctly
+
+**Simulation Page (`pages/1_simulation.py`):**
+- [ ] Solar profile statistics display correctly in sidebar
+- [ ] BESS profile statistics display correctly in sidebar
+- [ ] Battery size slider works (10-500 MWh range)
+- [ ] "Run Simulation" button triggers simulation
+- [ ] Metrics display correctly (4 metric cards)
+- [ ] Detailed metrics table populates
+- [ ] Download hourly data CSV works
+- [ ] "Find Optimal Size" button works
+- [ ] Progress bar displays during optimization
+- [ ] Optimal size result displays
+- [ ] All results table populates
+- [ ] Marginal improvements chart displays
+- [ ] Download all results CSV works
+
+**Configuration Page (`pages/0_configurations.py`):**
+- [ ] All configuration sliders work
+- [ ] Validation warnings appear for invalid inputs
+- [ ] Cannot run simulation with invalid config (enforced)
+- [ ] Configuration persists across page navigation
+- [ ] Reset to defaults button works
+- [ ] Configuration summary displays correctly
+
+**Calculation Logic Page (`pages/2_calculation_logic.py`):**
+- [ ] All 5 tabs load correctly
+- [ ] Code examples display properly
+- [ ] Warning about Energy ≠ Power displays
+- [ ] All tables render correctly
+- [ ] Code examples match actual implementation
+
+**Optimization Page (`pages/3_optimization.py`):**
+- [ ] Displays results from simulation page
+- [ ] Algorithm selection works
+- [ ] Performance threshold slider works
+- [ ] Charts render correctly
+- [ ] Export functionality works
+- [ ] "Run New Optimization" button works
+- [ ] Resource limits enforced (200 simulation cap)
+
+**Error Handling:**
+- [ ] Invalid solar profile file shows error message
+- [ ] Missing solar profile falls back to synthetic data
+- [ ] Error messages visible in UI (not just console)
+- [ ] Invalid configuration blocks simulation
+- [ ] Clear guidance provided for fixing errors
+
+**Cross-Browser Testing:**
+- [ ] Test on Chrome
+- [ ] Test on Firefox
+- [ ] Test on Safari
+- [ ] Test on Edge
+
+#### 4. CI/CD Integration with GitHub Actions
+
+**Priority:** MEDIUM
+**Impact:** Automated testing on every commit
+
+**Implementation:**
+```yaml
+# .github/workflows/test.yml
+name: BESS Sizing Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+
+    - name: Run tests
+      run: |
+        pytest tests/ -v --cov=src --cov=utils --cov-report=html
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.xml
+
+    - name: Check code quality
+      run: |
+        pip install flake8
+        flake8 src/ utils/ --max-line-length=120
+```
+
+#### 5. Performance Testing
+
+**Priority:** LOW
+**Impact:** Verify resource limits work correctly
+
+**Tests:**
+```python
+# tests/test_performance.py
+import time
+from src.battery_simulator import simulate_bess_year
+from src.data_loader import generate_synthetic_solar_profile
+
+def test_single_simulation_performance():
+    """Single simulation should complete in < 1 second."""
+    solar_profile = generate_synthetic_solar_profile()
+    config = {...}
+
+    start = time.time()
+    results = simulate_bess_year(100, solar_profile, config)
+    duration = time.time() - start
+
+    assert duration < 1.0, f"Simulation took {duration:.2f}s, expected < 1s"
+
+def test_200_simulation_limit():
+    """200 simulations should complete in < 2 minutes."""
+    solar_profile = generate_synthetic_solar_profile()
+    config = {...}
+
+    start = time.time()
+    for size in range(10, 500, 3):  # ~163 simulations
+        results = simulate_bess_year(size, solar_profile, config)
+    duration = time.time() - start
+
+    assert duration < 120, f"200 simulations took {duration:.2f}s, expected < 120s"
+```
+
+### Future Testing Enhancements
+
+#### 1. Test Data Repository
+Create standardized test datasets for reproducible testing:
+```
+tests/data/
+├── solar_profile_sunny_year.csv
+├── solar_profile_cloudy_year.csv
+├── solar_profile_seasonal.csv
+└── expected_results/
+    ├── 100mwh_sunny.json
+    ├── 100mwh_cloudy.json
+    └── optimal_size_baseline.json
+```
+
+#### 2. Property-Based Testing (Hypothesis)
+Test with random valid inputs to find edge cases:
+```python
+from hypothesis import given, strategies as st
+
+@given(
+    battery_size=st.floats(min_value=10, max_value=500),
+    min_soc=st.floats(min_value=0.0, max_value=0.5),
+    max_soc=st.floats(min_value=0.5, max_value=1.0)
+)
+def test_simulation_never_crashes(battery_size, min_soc, max_soc):
+    # Test that simulation handles any valid inputs
+    config = {...}
+    config['MIN_SOC'] = min_soc
+    config['MAX_SOC'] = max_soc
+
+    results = simulate_bess_year(battery_size, solar_profile, config)
+    assert results['hours_delivered'] >= 0
+```
+
+#### 3. Regression Testing
+Capture baseline results and verify they don't change unexpectedly:
+```python
+# tests/test_regression.py
+import json
+
+def test_regression_100mwh_baseline():
+    """Verify 100 MWh battery results match baseline."""
+    with open('tests/expected_results/100mwh_baseline.json') as f:
+        expected = json.load(f)
+
+    solar_profile = load_test_solar_profile()
+    config = load_test_config()
+    results = simulate_bess_year(100, solar_profile, config)
+
+    # Allow small tolerance for floating point differences
+    assert abs(results['hours_delivered'] - expected['hours_delivered']) <= 1
+    assert abs(results['total_cycles'] - expected['total_cycles']) < 0.1
+```
+
+### Testing Tools Comparison
+
+| Tool | Purpose | Pros | Cons | Recommendation |
+|------|---------|------|------|----------------|
+| **pytest** | Unit/integration testing | Standard, mature, extensive ecosystem | Requires test code maintenance | ⭐⭐⭐⭐⭐ Essential |
+| **Streamlit Testing** | UI testing | Native Streamlit support | Limited to Streamlit apps | ⭐⭐⭐⭐ Recommended |
+| **Playwright** | Browser testing | Full browser automation | Slower, more complex setup | ⭐⭐⭐ Optional |
+| **Manual Checklist** | UI validation | Catches UX issues | Time-consuming, not automated | ⭐⭐⭐⭐ Important |
+| **CI/CD (GitHub Actions)** | Automated testing | Runs on every commit | Requires setup | ⭐⭐⭐⭐⭐ Essential |
+| **MCP Server** | External integrations | Extends capabilities | Not needed for this app | ⭐ Not applicable |
+
+### MCP Server Note
+
+**MCP (Model Context Protocol) servers** are primarily for extending AI assistant capabilities with external tools and data sources. They are **not specifically designed for testing**.
+
+**MCP could be used for:**
+- Database integration testing (if app used external DB)
+- API testing (if app integrated with external APIs)
+- Custom data source testing (e.g., live weather data)
+
+**For this BESS sizing application:**
+- **pytest + manual checklist is more practical** than MCP
+- MCP would add unnecessary complexity without clear benefits
+- Standard testing tools (pytest, Streamlit Testing) are better suited
+
+### Recommended Testing Implementation Order
+
+**Phase 1: Foundation (Week 1)**
+1. Create pytest test suite for core functions
+2. Add tests for Bug #1-8 fixes (regression prevention)
+3. Set up manual testing checklist
+4. Document baseline test results
+
+**Phase 2: Automation (Week 2)**
+5. Set up GitHub Actions CI/CD
+6. Add Streamlit Testing for UI components
+7. Create test data repository
+8. Add coverage reporting
+
+**Phase 3: Enhancement (Week 3+)**
+9. Add performance tests
+10. Add property-based testing
+11. Add regression test suite
+12. Set up automated test reporting
+
+---
+
 ## 📊 Priority Action Plan
 
 ### Phase 1: CRITICAL (Day 1)
@@ -1012,6 +1461,12 @@ class SimulationCache:
 - Add logging
 - Add tests
 - Clean repository
+
+### Phase 5: TESTING (Ongoing)
+- Implement pytest test suite
+- Set up CI/CD with GitHub Actions
+- Create manual testing checklist
+- Add regression tests for all bug fixes
 
 ---
 

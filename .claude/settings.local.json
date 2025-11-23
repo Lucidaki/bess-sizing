@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(find:*)",
-      "Bash(fc:*)"
+      "Bash(fc:*)",
+      "Bash(python:*)",
+      "Bash(powershell -Command:*)"
     ],
     "deny": [],
     "ask": []
