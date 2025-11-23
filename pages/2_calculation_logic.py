@@ -5,7 +5,6 @@ Detailed explanation of BESS sizing calculations and algorithms
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 
 from src.config import (
     TARGET_DELIVERY_MW, MIN_SOC, MAX_SOC,

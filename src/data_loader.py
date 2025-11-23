@@ -6,6 +6,10 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from .config import SOLAR_PROFILE_PATH
+from utils.logger import get_logger
+
+# Set up module logger
+logger = get_logger(__name__)
 
 def load_solar_profile(file_path=None):
     """
@@ -57,15 +61,22 @@ def load_solar_profile(file_path=None):
 
         # Ensure we have 8760 values
         if len(solar_profile) != 8760:
+            warning_msg = f"Solar profile has {len(solar_profile)} hours, expected 8760. Results may be inaccurate."
+            logger.warning(warning_msg)
+
             try:
                 import streamlit as st
-                st.warning(f"⚠️ Solar profile has {len(solar_profile)} hours, expected 8760. Results may be inaccurate.")
+                st.warning(f"⚠️ {warning_msg}")
             except ImportError:
-                print(f"Warning: Solar profile has {len(solar_profile)} hours, expected 8760")
+                pass  # Logger already handled the warning
 
         return solar_profile
 
     except Exception as e:
+        # Log the error
+        logger.error(f"Failed to load solar profile: {str(e)}")
+        logger.error(f"Solar profile file '{SOLAR_PROFILE_PATH}' is required")
+
         # Show user-visible error messages in Streamlit UI
         try:
             import streamlit as st
@@ -74,9 +85,7 @@ def load_solar_profile(file_path=None):
             st.info(f"📝 Please ensure '{SOLAR_PROFILE_PATH}' exists with 8760 hourly values")
             st.info("📤 Future versions will support uploading custom solar profile files")
         except ImportError:
-            # Fallback to console if Streamlit not available (e.g., during testing)
-            print(f"Error loading solar profile: {e}")
-            print(f"Solar profile file '{SOLAR_PROFILE_PATH}' is required")
+            pass  # Logger already handled the error
 
         # Return None - caller must handle missing solar profile
         return None

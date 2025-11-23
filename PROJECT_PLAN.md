@@ -1,8 +1,19 @@
 # BESS Sizing Tool - Complete Project Plan & Documentation
 
+> **Version 1.1.0** (2025-11-23) - Updated with v1.1.0 production hardening changes
+>
+> See [CHANGELOG.md](CHANGELOG.md) for version history and recent updates.
+
 ## 📋 Executive Summary
 
 The Battery Energy Storage System (BESS) Sizing Tool is a comprehensive Streamlit-based application designed to optimize battery storage sizing for solar energy systems. The tool simulates year-long battery operations, enforces operational constraints, and provides advanced optimization algorithms to determine the ideal battery capacity for maximizing delivery hours while respecting technical limitations.
+
+**Recent Updates (v1.1.0):**
+
+- Professional logging framework with centralized configuration
+- Pinned dependency versions for reproducible deployments
+- Enhanced package structure with convenient imports
+- Code quality improvements and bug fixes
 
 ---
 
@@ -28,11 +39,14 @@ The Battery Energy Storage System (BESS) Sizing Tool is a comprehensive Streamli
 
 ### Technology Stack
 ```
-Frontend:      Streamlit 1.28+
-Backend:       Python 3.8+
-Data Processing: Pandas 2.0+, NumPy 1.24+
-Visualization: Plotly 5.0+
+Frontend:        Streamlit 1.28.0 (pinned)
+Backend:         Python 3.8+
+Data Processing: Pandas 2.0.0 (pinned), NumPy 1.24.0 (pinned)
+Visualization:   Plotly 5.0.0 (pinned)
+Logging:         Python logging module (built-in)
 ```
+
+**Note:** All dependencies are pinned to exact versions in `requirements.txt` for reproducible deployments (v1.1.0+).
 
 ### Application Structure
 ```
@@ -40,17 +54,20 @@ BESS-22-nov/
 │
 ├── app.py                     # Main application entry point
 ├── setup.py                   # Python package configuration (enables proper imports)
-├── requirements.txt           # Python dependencies (includes -e . for package install)
+├── requirements.txt           # Python dependencies (pinned versions, includes -e .)
+├── CHANGELOG.md              # Version history and changes (NEW in v1.1.0)
+├── BUG_REPORT_ANALYSIS.md    # Detailed bug tracking and fixes
 ├── PROJECT_PLAN.md           # This document
 │
 ├── src/                      # Core business logic (installed as package)
-│   ├── __init__.py
+│   ├── __init__.py          # Package exports (enhanced in v1.1.0)
 │   ├── config.py            # Default configuration constants
 │   ├── battery_simulator.py # Battery operation simulation engine
-│   └── data_loader.py       # Solar profile data management
+│   └── data_loader.py       # Solar profile data management (with logging)
 │
 ├── utils/                    # Utility functions (installed as package)
-│   ├── __init__.py
+│   ├── __init__.py          # Package exports (enhanced in v1.1.0)
+│   ├── logger.py            # Centralized logging framework (NEW in v1.1.0)
 │   ├── metrics.py           # Metrics calculation and analysis
 │   ├── config_manager.py   # Configuration state management
 │   └── validators.py        # Configuration validation utilities

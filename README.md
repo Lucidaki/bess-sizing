@@ -2,6 +2,10 @@
 
 A comprehensive Battery Energy Storage System (BESS) sizing optimization tool for solar+storage systems.
 
+> **Latest Version: 1.1.0** (2025-11-23)
+> Production-ready with professional logging, pinned dependencies, and enhanced code structure.
+> See [CHANGELOG.md](CHANGELOG.md) for details.
+
 ## 🚀 Quick Start
 
 ```bash
@@ -22,23 +26,44 @@ Open browser at `http://localhost:8501`
 - **📊 Advanced Visualizations**: Interactive Plotly charts
 - **📈 Comprehensive Metrics**: Delivery hours, cycles, degradation tracking
 - **💾 Export Capabilities**: Download results as CSV
+- **📝 Professional Logging**: Structured logging with timestamps and module identification (NEW in v1.1.0)
+- **📦 Package Structure**: Clean imports with proper package initialization (NEW in v1.1.0)
+
+## ✨ What's New in v1.1.0
+
+### Production Hardening Release
+
+- **Professional Logging Framework**: Centralized logging with formatted messages, timestamps, and log levels
+- **Pinned Dependencies**: Exact version pinning for reproducible deployments (prevents breaking changes)
+- **Enhanced Package Structure**: Convenient package-level imports (`from src import BatterySystem`)
+- **Code Cleanup**: Removed unused imports and improved code quality
+- **Better Error Handling**: Structured error messages with proper logging
+
+See [CHANGELOG.md](CHANGELOG.md) for complete release notes.
 
 ## 🏗️ Project Structure
 
 ```
 ├── app.py                    # Main entry point
+├── setup.py                  # Package configuration
+├── requirements.txt          # Dependencies (pinned versions)
+├── CHANGELOG.md             # Version history and changes
 ├── pages/
 │   ├── 0_configurations.py  # System configuration
 │   ├── 1_simulation.py      # Battery simulation
 │   ├── 2_calculation_logic.py # Documentation
 │   └── 3_optimization.py    # Optimization analysis
 ├── src/
+│   ├── __init__.py         # Package exports
 │   ├── battery_simulator.py # Core simulation engine
 │   ├── config.py           # Default configurations
-│   └── data_loader.py      # Data management
+│   └── data_loader.py      # Data management (with logging)
 └── utils/
+    ├── __init__.py         # Package exports
+    ├── logger.py           # Centralized logging (NEW)
     ├── metrics.py          # Metrics calculations
-    └── config_manager.py   # Config state management
+    ├── config_manager.py   # Config state management
+    └── validators.py       # Input validation
 ```
 
 ## 🎯 Key Specifications
@@ -79,19 +104,24 @@ Degradation: 0.448%
 ## 🛠️ Requirements
 
 - Python 3.8+
-- Streamlit 1.28+
-- Pandas 2.0+
-- NumPy 1.24+
-- Plotly 5.0+
+- **Pinned Dependencies** (exact versions for reproducibility):
+  - Streamlit 1.28.0
+  - Pandas 2.0.0
+  - NumPy 1.24.0
+  - Plotly 5.0.0
+
+All dependencies are pinned to exact versions in `requirements.txt` to ensure consistent behavior across deployments.
 
 ## 📄 Documentation
 
-See `PROJECT_PLAN.md` for comprehensive documentation including:
-- Detailed technical specifications
-- Algorithm explanations
-- Configuration options
-- Usage instructions
-- System architecture
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and recent changes
+- **[BUG_REPORT_ANALYSIS.md](BUG_REPORT_ANALYSIS.md)** - Detailed bug tracking and fixes
+- **[PROJECT_PLAN.md](PROJECT_PLAN.md)** - Comprehensive technical documentation including:
+  - Detailed technical specifications
+  - Algorithm explanations
+  - Configuration options
+  - Usage instructions
+  - System architecture
 
 ## 🤝 Contributing
 
