@@ -29,9 +29,10 @@ def calculate_metrics_summary(battery_capacity_mwh, simulation_results):
         dict: Formatted metrics
     """
     # Calculate wastage percentage
-    total_possible_solar = simulation_results.get('solar_charged_mwh', 0) + simulation_results.get('solar_wasted_mwh', 0) + simulation_results.get('energy_delivered_mwh', 0)
-    if total_possible_solar > 0:
-        wastage_percent = (simulation_results['solar_wasted_mwh'] / total_possible_solar) * 100
+    # Wastage = wasted solar / total solar available (excludes battery discharge energy)
+    total_solar_available = simulation_results.get('solar_charged_mwh', 0) + simulation_results.get('solar_wasted_mwh', 0)
+    if total_solar_available > 0:
+        wastage_percent = (simulation_results['solar_wasted_mwh'] / total_solar_available) * 100
     else:
         wastage_percent = 0
 

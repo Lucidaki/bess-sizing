@@ -217,7 +217,11 @@ def simulate_bess_year(battery_capacity_mwh, solar_profile, config=None):
         solar_mw = solar_profile[hour]
 
         # Check if we can deliver target power
-        battery_available_mw = battery.get_available_energy()
+        # Get actual power available from battery (MW), respecting C-rate
+        battery_available_mw = min(
+            battery.get_available_energy(),  # Energy limit (MWh = MW for 1 hour)
+            battery.capacity * battery.c_rate_discharge  # Power limit (MW)
+        )
 
         # Check basic ability to deliver
         can_deliver_resources = (solar_mw + battery_available_mw) >= target_delivery_mw
@@ -245,11 +249,13 @@ def simulate_bess_year(battery_capacity_mwh, solar_profile, config=None):
         }
 
         if can_deliver:
-            # Deliver target power
-            results['hours_delivered'] += 1
-            results['energy_delivered_mwh'] += target_delivery_mw
+            # Attempt to deliver target power
+            # Note: Will verify actual delivery success below before counting
 
             if solar_mw >= target_delivery_mw:
+                # Solar alone can meet target - delivery successful
+                results['hours_delivered'] += 1
+                results['energy_delivered_mwh'] += target_delivery_mw
                 # Excess solar available - charge battery
                 excess_mw = solar_mw - target_delivery_mw
                 if excess_mw > 0 and battery.get_charge_headroom() > 0:
@@ -293,15 +299,19 @@ def simulate_bess_year(battery_capacity_mwh, solar_profile, config=None):
                     # Calculate actual deficit (if battery couldn't fully support)
                     actual_delivered = solar_mw + discharged
                     hour_data['deficit_mw'] = max(0, target_delivery_mw - actual_delivered)
+
+                    # Only count as delivered if we actually met the target (within small tolerance)
+                    if actual_delivered >= target_delivery_mw - 0.01:
+                        results['hours_delivered'] += 1
+                        results['energy_delivered_mwh'] += target_delivery_mw
+                    else:
+                        # Couldn't fully deliver
+                        hour_data['delivery'] = 'No'
                 else:
                     # Cannot cycle - stay idle, cannot deliver
                     new_state = 'IDLE'
                     hour_data['bess_mw'] = 0
                     hour_data['deficit_mw'] = target_delivery_mw - solar_mw
-
-                    # Actually, we cannot deliver if we can't discharge
-                    results['hours_delivered'] -= 1  # Correct the count
-                    results['energy_delivered_mwh'] -= target_delivery_mw
                     hour_data['delivery'] = 'No'
         else:
             # Cannot deliver - charge battery with available solar

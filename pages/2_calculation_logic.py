@@ -259,6 +259,29 @@ with tab4:
    optimal = first size where marginal < 300 hours per 10 MWh
     """, language='text')
 
+    st.markdown("### Solar Wastage Calculation")
+    st.info("""
+    **Wastage Formula: Wasted Solar / Total Solar Available**
+
+    The wastage percentage represents solar energy that could not be used:
+    - **Numerator**: Solar wasted (MWh)
+    - **Denominator**: Total solar available = Solar charged + Solar wasted
+
+    **Important**: Battery discharge energy is NOT included in the denominator
+    as it's not solar energy.
+    """)
+
+    st.code("""
+# Correct wastage calculation
+total_solar_available = solar_charged_mwh + solar_wasted_mwh
+wastage_percent = (solar_wasted_mwh / total_solar_available) × 100
+
+# Example:
+# - 800 MWh solar charged to battery
+# - 200 MWh solar wasted
+# - Wastage = 200 / (800 + 200) = 20%
+    """, language='python')
+
     st.markdown("### Degradation Model")
     st.markdown(f"""
     **Degradation per cycle: {DEGRADATION_PER_CYCLE:.4%}**
