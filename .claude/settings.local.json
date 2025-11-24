@@ -4,7 +4,8 @@
       "Bash(find:*)",
       "Bash(fc:*)",
       "Bash(python:*)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []
