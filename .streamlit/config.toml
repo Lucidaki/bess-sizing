@@ -7,8 +7,8 @@ font = "sans serif"
 
 [server]
 headless = true
-# Note: CORS and XSRF settings removed - Streamlit Cloud handles these internally
-# Adding them can interfere with Streamlit Cloud's authentication
+enableCORS = false
+enableXsrfProtection = false
 
 [browser]
 gatherUsageStats = false
