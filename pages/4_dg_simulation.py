@@ -32,15 +32,33 @@ This simulation models a hybrid system with:
 
 st.markdown("---")
 
-# Load solar profile
+# Load solar profile with error handling
+import os
+
 @st.cache_data
-def get_solar_data():
+def get_solar_data(_file_modified_time):
     """Load and cache solar profile data."""
     profile = load_solar_profile()
+    if profile is None:
+        return None, None
     stats = get_solar_statistics(profile)
     return profile, stats
 
-solar_profile, solar_stats = get_solar_data()
+# Check if solar file exists first
+solar_file = Path("Inputs/Solar Profile.csv")
+
+if not solar_file.exists():
+    st.error("🚫 **Cannot Run Simulations - Solar Profile Missing**")
+    st.warning(f"Required file not found: `{solar_file}`")
+    st.stop()
+
+# File exists, load it with hash-based caching
+file_modified_time = os.path.getmtime(solar_file)
+solar_profile, solar_stats = get_solar_data(file_modified_time)
+
+if solar_profile is None:
+    st.error("🚫 **Error Loading Solar Profile**")
+    st.stop()
 
 # Get configuration
 config = get_config()
