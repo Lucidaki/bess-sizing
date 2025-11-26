@@ -3,9 +3,12 @@
     "allow": [
       "Bash(find:*)",
       "Bash(fc:*)",
+      "Bash(python:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(tree:*)",
+      "Bash(dir /s /b)",
       "Bash(cat:*)",
-      "Bash(python -m py_compile:*)",
-      "Bash(python:*)"
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []
