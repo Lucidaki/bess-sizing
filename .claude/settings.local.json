@@ -5,7 +5,10 @@
       "Bash(fc:*)",
       "Bash(python:*)",
       "Bash(powershell -Command:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(dir /s /b)",
+      "Bash(cat:*)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []
