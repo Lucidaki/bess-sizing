@@ -126,23 +126,29 @@ streamlit run app.py --server.headless true
 - `/pages/` - Streamlit multipage components
   - `0_configurations.py` - Configuration UI
   - `1_simulation.py` - Single simulation interface
-  - `2_calculation_logic.py` - Documentation page
-  - `3_optimization.py` - Optimization analysis
+  - `2_optimization.py` - Optimization analysis
+  - `3_dg_simulation.py` - Solar+BESS+DG simulation
+  - `4_calculation_logic.py` - Documentation page (reference)
 - `/tests/` - Unit and integration tests
 - `app.py` - Main application entry point
 - `setup.py` - Python package configuration (for dependency management changes)
 
 **NEVER MODIFY**:
 - `/Inputs/Solar Profile.csv` - Original solar data (copy for modifications)
-- `/.streamlit/` - Streamlit configuration
 - `/__pycache__/` - Python bytecode cache
 - `.git/` - Version control
+
+**ASK BEFORE MODIFYING** (Critical deployment files - changes can break Streamlit Cloud):
+- `/.streamlit/config.toml` - Streamlit configuration (CORS, XSRF, theme settings)
+- `requirements.txt` - Dependency versions (pinned for stability)
+- `runtime.txt` - Python version specification
+- `setup.py` - Package configuration
+
+⚠️ **IMPORTANT**: Do NOT amend or change existing entries in these files without explicit user approval. You may ADD new entries, but modifying or removing existing values requires asking the user first. These files contain tested, working configurations for Streamlit Cloud deployment.
 
 **REFERENCE ONLY**:
 - `PROJECT_PLAN.md` - Comprehensive project documentation
 - `PROJECT_DOCUMENTATION.md` - Additional technical details
-- `requirements.txt` - Dependency specifications (includes `-e .` for package installation)
-- `setup.py` - Defines project as proper Python package (enables imports without sys.path)
 
 ### Code Style & Architecture Standards
 

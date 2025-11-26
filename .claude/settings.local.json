@@ -26,7 +26,10 @@
       "Bash(git -C \"c:\\repos\\bess-sizing\" show 90eb016 -- .streamlit/config.toml)",
       "Bash(git -C \"c:\\repos\\bess-sizing\" show 4f5f7ca:requirements.txt)",
       "Bash(git -C \"c:\\repos\\bess-sizing\" show 4f5f7ca:runtime.txt)",
-      "Bash(git -C \"c:\\repos\\bess-sizing\" show 4f5f7ca:.streamlit/config.toml)"
+      "Bash(git -C \"c:\\repos\\bess-sizing\" show 4f5f7ca:.streamlit/config.toml)",
+      "Bash(git -C \"c:\\repos\\bess-sizing\" mv pages/3_optimization.py pages/2_optimization.py)",
+      "Bash(git -C \"c:\\repos\\bess-sizing\" mv pages/4_dg_simulation.py pages/3_dg_simulation.py)",
+      "Bash(git -C \"c:\\repos\\bess-sizing\" mv pages/5_calculation_logic.py pages/4_calculation_logic.py)"
     ],
     "deny": [],
     "ask": []
