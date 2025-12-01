@@ -17,7 +17,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="BESS Sizing Team",
-    python_requires=">=3.9",
+    python_requires=">=3.11",
 
     # Package discovery
     packages=find_packages(include=["src", "src.*", "utils", "utils.*"]),
@@ -57,9 +57,8 @@ setup(
         "Intended Audience :: Science/Research",
         "Topic :: Scientific/Engineering",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
 )

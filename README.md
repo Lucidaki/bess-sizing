@@ -66,8 +66,9 @@ See [CHANGELOG.md](CHANGELOG.md) for complete release notes.
 │   ├── 0_configurations.py   # System configuration
 │   ├── 1_simulation.py       # Battery simulation
 │   ├── 2_optimization.py     # Optimization analysis
-│   ├── 3_dg_simulation.py    # Solar+BESS+DG simulation (NEW)
-│   └── 4_calculation_logic.py # Documentation with flow diagrams
+│   ├── 3_dg_simulation.py    # Solar+BESS+DG simulation
+│   ├── 4_calculation_logic.py # Documentation with flow diagrams
+│   └── 5_hourly_examples.py  # Hourly operation examples & DG scenarios
 ├── src/
 │   ├── __init__.py           # Package exports
 │   ├── battery_simulator.py  # Core simulation engine

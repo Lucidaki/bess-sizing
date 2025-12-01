@@ -1,5 +1,8 @@
 # BESS Sizing Tool - Bug Analysis & Priority Fix Guide
 
+> **Note:** This document references v1.1.x page structure. Page numbers were reorganized in v1.2.0.
+> See [CHANGELOG.md](CHANGELOG.md) for the current page structure.
+
 ## Executive Summary
 This document provides a comprehensive analysis of all issues identified in the code review, validated against the actual codebase. Issues are categorized by severity and include detailed descriptions, impact analysis, and specific fix recommendations.
 

@@ -3,6 +3,8 @@ BESS Configuration Page
 Modify all system parameters and constraints
 """
 
+import json
+
 import streamlit as st
 
 # Import default configurations
@@ -345,7 +347,6 @@ with col2:
 
 with col3:
     # Export configuration
-    import json
     config_json = json.dumps(st.session_state.config, indent=2)
     st.download_button(
         label="📥 Export Config",

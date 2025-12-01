@@ -78,8 +78,10 @@ BESS-22-nov/
 ├── pages/                    # Streamlit multipage app
 │   ├── 0_configurations.py  # Configuration management page
 │   ├── 1_simulation.py      # Single battery simulation
-│   ├── 2_calculation_logic.py # Documentation page
-│   └── 3_optimization.py    # Advanced optimization analysis
+│   ├── 2_optimization.py    # Advanced optimization analysis
+│   ├── 3_dg_simulation.py   # Solar+BESS+DG hybrid simulation
+│   ├── 4_calculation_logic.py # Documentation with flow diagrams
+│   └── 5_hourly_examples.py # Hourly operation examples & DG scenarios
 │
 └── Inputs/                   # Data inputs
     └── Solar Profile.csv     # Hourly solar generation data
