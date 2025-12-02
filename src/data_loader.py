@@ -90,46 +90,6 @@ def load_solar_profile(file_path=None):
         # Return None - caller must handle missing solar profile
         return None
 
-def generate_synthetic_solar_profile():
-    """
-    ⚠️ DEPRECATED: This function is deprecated and should only be used for unit testing.
-
-    Generate a synthetic solar profile for testing purposes.
-    Production code should NOT use this function - real solar data is required.
-
-    Returns:
-        numpy array: Synthetic hourly solar generation for 8760 hours
-    """
-    import warnings
-    warnings.warn(
-        "generate_synthetic_solar_profile() is deprecated. "
-        "Use real solar profile data. This function should only be used in unit tests.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-    hours = np.arange(8760)
-    days = hours // 24
-    hour_of_day = hours % 24
-
-    # Simple solar pattern: zero at night, peak at noon
-    solar_profile = np.zeros(8760)
-
-    for i in range(8760):
-        h = hour_of_day[i]
-        d = days[i]
-
-        # Solar generation only between 6 AM and 6 PM
-        if 6 <= h <= 18:
-            # Peak at noon (12:00)
-            peak_factor = 1 - abs(h - 12) / 6
-            # Seasonal variation
-            seasonal_factor = 0.7 + 0.3 * np.sin(2 * np.pi * d / 365)
-            # Random cloud cover
-            weather_factor = 0.5 + 0.5 * np.random.random()
-
-            solar_profile[i] = 67 * peak_factor * seasonal_factor * weather_factor
-
-    return solar_profile
 
 def get_solar_statistics(solar_profile):
     """

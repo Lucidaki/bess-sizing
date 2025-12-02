@@ -2,6 +2,8 @@
 Metrics calculation utilities for BESS sizing analysis
 """
 
+import datetime
+
 import pandas as pd
 import numpy as np
 
@@ -9,7 +11,9 @@ from src.config import (
     MARGINAL_IMPROVEMENT_THRESHOLD,
     MARGINAL_INCREMENT_MWH,
     BATTERY_SIZE_STEP_MWH,
-    HOURS_PER_YEAR
+    HOURS_PER_YEAR,
+    MAX_SIMULATIONS,
+    SIMULATION_START_YEAR
 )
 
 
@@ -135,9 +139,8 @@ def create_hourly_dataframe(hourly_data):
     """
     df = pd.DataFrame(hourly_data)
 
-    # Create date column (assuming simulation starts from Jan 1, 2024)
-    import datetime
-    start_date = datetime.date(2024, 1, 1)
+    # Create date column using configured simulation start year
+    start_date = datetime.date(SIMULATION_START_YEAR, 1, 1)
     df['date'] = pd.to_datetime(start_date) + pd.to_timedelta(df['hour'] // 24, unit='days')
     df['date'] = df['date'].dt.strftime('%Y-%m-%d')
 
@@ -294,9 +297,8 @@ def create_dg_hourly_dataframe(hourly_data):
     """
     df = pd.DataFrame(hourly_data)
 
-    # Create date column (assuming simulation starts from Jan 1, 2024)
-    import datetime
-    start_date = datetime.date(2024, 1, 1)
+    # Create date column using configured simulation start year
+    start_date = datetime.date(SIMULATION_START_YEAR, 1, 1)
     df['date'] = pd.to_datetime(start_date) + pd.to_timedelta(df['hour'] // 24, unit='days')
     df['date'] = df['date'].dt.strftime('%Y-%m-%d')
 
@@ -325,3 +327,45 @@ def create_dg_hourly_dataframe(hourly_data):
     })
 
     return result_df
+
+
+def calculate_simulation_params(min_size, max_size, step_size, max_simulations=None):
+    """
+    Calculate simulation parameters with auto-adjustment for resource limits.
+
+    Args:
+        min_size: Minimum battery size (MWh)
+        max_size: Maximum battery size (MWh)
+        step_size: Step size between simulations (MWh)
+        max_simulations: Maximum allowed simulations (defaults to MAX_SIMULATIONS)
+
+    Returns:
+        dict: {
+            'num_simulations': int - Number of simulations to run
+            'actual_step_size': int - Adjusted step size
+            'was_adjusted': bool - Whether step size was auto-adjusted
+            'battery_sizes': list - List of battery sizes to test
+        }
+    """
+    if max_simulations is None:
+        max_simulations = MAX_SIMULATIONS
+
+    num_simulations = len(list(range(min_size, max_size + step_size, step_size)))
+    actual_step_size = step_size
+    was_adjusted = False
+
+    if num_simulations > max_simulations:
+        # Auto-adjust step size to cap at max_simulations
+        actual_step_size = (max_size - min_size) // max_simulations + 1
+        was_adjusted = True
+
+    battery_sizes = list(range(min_size, max_size + actual_step_size, actual_step_size))
+    num_simulations = len(battery_sizes)
+
+    return {
+        'num_simulations': num_simulations,
+        'actual_step_size': actual_step_size,
+        'was_adjusted': was_adjusted,
+        'original_step_size': step_size,
+        'battery_sizes': battery_sizes
+    }

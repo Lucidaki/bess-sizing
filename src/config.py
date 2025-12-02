@@ -30,6 +30,12 @@ DEGRADATION_PER_CYCLE = 0.0015  # Capacity degradation per cycle (0.15%)
 HOURS_PER_YEAR = 8760  # Hours in a year
 DAYS_PER_YEAR = 365  # Days in a year
 INITIAL_SOC = 0.5  # Initial state of charge (50%)
+MAX_SIMULATIONS = 200  # Maximum simulations for resource limits
+SIMULATION_START_YEAR = 2024  # Default year for hourly data timestamps
+
+# Tolerance Parameters
+DELIVERY_TOLERANCE_MW = 0.01  # Tolerance for delivery verification
+FLOATING_POINT_TOLERANCE = 0.001  # Tolerance for floating point comparisons
 
 # File Paths
 SOLAR_PROFILE_PATH = "Inputs/Solar Profile.csv"
