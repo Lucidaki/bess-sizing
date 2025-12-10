@@ -218,6 +218,7 @@ def run_single_simulation(bess_mwh, duration, dg_mw, template_id, setup, rules, 
         dg_enabled=setup['dg_enabled'],
         dg_capacity=dg_mw,
         dg_charges_bess=rules.get('dg_charges_bess', False),
+        dg_load_priority=rules.get('dg_load_priority', 'bess_first'),
         night_start_hour=rules.get('night_start', 18),
         night_end_hour=rules.get('night_end', 6),
         day_start_hour=rules.get('day_start', 6),
@@ -417,10 +418,12 @@ if run_analysis or 'analysis_hourly_data' in st.session_state:
                     'bess_mw': h.bess_power,
                     'soc_percent': h.soc_pct,
                     'bess_state': h.bess_state,
-                    'dg_output_mw': h.dg_to_load + h.dg_to_bess,
+                    'dg_output_mw': h.dg_to_load + h.dg_to_bess + h.dg_curtailed,  # Total DG output
                     'dg_state': 'ON' if h.dg_running else 'OFF',
                     'solar_to_load': h.solar_to_load,
                     'dg_to_load': h.dg_to_load,
+                    'dg_to_bess': h.dg_to_bess,
+                    'dg_curtailed': h.dg_curtailed,
                     'bess_to_load': h.bess_to_load,
                     'unmet_mw': h.unserved,
                     'delivery': 'Yes' if h.unserved == 0 else 'No',
@@ -456,12 +459,15 @@ if run_analysis or 'analysis_hourly_data' in st.session_state:
         dg_hours = (hourly_df['dg_state'] == 'ON').sum()
         avg_soc = hourly_df['soc_percent'].mean()
         solar_curtailed = hourly_df['solar_curtailed'].sum()
+        total_solar = hourly_df['solar_mw'].sum()
+        wastage_pct = (solar_curtailed / total_solar * 100) if total_solar > 0 else 0
 
-        metric_cols = st.columns(4)
+        metric_cols = st.columns(5)
         metric_cols[0].metric("Delivery Hours", f"{delivery_hours}/{total_hours}", f"{delivery_hours/total_hours*100:.1f}%")
         metric_cols[1].metric("DG Runtime", f"{dg_hours} hrs", f"{dg_hours/total_hours*100:.1f}% of period")
         metric_cols[2].metric("Avg SOC", f"{avg_soc:.0f}%")
         metric_cols[3].metric("Solar Curtailed", f"{solar_curtailed:.1f} MWh")
+        metric_cols[4].metric("Wastage %", f"{wastage_pct:.1f}%")
 
         # Create and display dispatch graph
         soc_on = rules.get('soc_on_threshold', 30)
@@ -491,6 +497,9 @@ if run_analysis or 'analysis_hourly_data' in st.session_state:
         display_df['HoD'] = display_df['hour_of_day']
         display_df['Solar (MW)'] = display_df['solar_mw'].round(1)
         display_df['DG (MW)'] = display_df['dg_output_mw'].round(1)
+        display_df['DG→Load'] = display_df['dg_to_load'].round(1)
+        display_df['DG→BESS'] = display_df['dg_to_bess'].round(1)
+        display_df['DG Curt'] = display_df['dg_curtailed'].round(1)
         display_df['BESS (MW)'] = display_df['bess_mw'].round(1)
         display_df['SOC (%)'] = display_df['soc_percent'].round(1)
         display_df['BESS State'] = display_df['bess_state']
@@ -501,7 +510,8 @@ if run_analysis or 'analysis_hourly_data' in st.session_state:
 
         display_cols = [
             'Hour', 'Day', 'HoD',
-            'Solar (MW)', 'DG (MW)', 'BESS (MW)', 'SOC (%)',
+            'Solar (MW)', 'DG (MW)', 'DG→Load', 'DG→BESS', 'DG Curt',
+            'BESS (MW)', 'SOC (%)',
             'BESS State', 'DG State',
             'To Load (MW)', 'Unmet (MW)', 'Delivery'
         ]

@@ -46,6 +46,7 @@ class SimulationParams:
     dg_enabled: bool = False
     dg_capacity: float = 0  # MW
     dg_charges_bess: bool = True
+    dg_load_priority: str = 'bess_first'  # 'bess_first' or 'dg_first'
 
     # Template-specific: Time windows
     night_start_hour: int = 18
@@ -377,7 +378,7 @@ def dispatch_template_0(params: SimulationParams, state: SimulationState,
 def dispatch_template_1(params: SimulationParams, state: SimulationState,
                         hour: HourlyResult, remaining_load: float,
                         excess_solar: float) -> Tuple[float, bool, float]:
-    """Template 1: Green Priority. Merit: Solar -> BESS -> DG -> Unserved."""
+    """Template 1: Green Priority. Merit order depends on dg_load_priority setting."""
     bess_discharged = False
     charge_power_used = 0
 
@@ -388,15 +389,29 @@ def dispatch_template_1(params: SimulationParams, state: SimulationState,
     else:
         hour.solar_curtailed = excess_solar
 
-    # Discharge BESS
-    if remaining_load > 0 and not state.bess_disabled_today:
-        hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
-        remaining_load -= hour.bess_to_load
+    # Load serving order depends on dg_load_priority
+    if params.dg_load_priority == 'dg_first':
+        # DG First: Solar -> DG -> BESS -> Unserved
+        # DG activation first (when load exceeds solar)
+        if remaining_load > 0.001 and state.dg_capacity > 0:
+            remaining_load, charge_power_used = activate_dg(
+                state, params, hour, remaining_load, bess_discharged, charge_power_used)
 
-    # DG activation (reactive - only when BESS insufficient)
-    if remaining_load > 0.001 and state.dg_capacity > 0:
-        remaining_load, charge_power_used = activate_dg(
-            state, params, hour, remaining_load, bess_discharged, charge_power_used)
+        # Then discharge BESS for any remaining load
+        if remaining_load > 0 and not state.bess_disabled_today:
+            hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+            remaining_load -= hour.bess_to_load
+    else:
+        # BESS First (default): Solar -> BESS -> DG -> Unserved
+        # Discharge BESS first
+        if remaining_load > 0 and not state.bess_disabled_today:
+            hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+            remaining_load -= hour.bess_to_load
+
+        # DG activation (reactive - only when BESS insufficient)
+        if remaining_load > 0.001 and state.dg_capacity > 0:
+            remaining_load, charge_power_used = activate_dg(
+                state, params, hour, remaining_load, bess_discharged, charge_power_used)
 
     return remaining_load, bess_discharged, charge_power_used
 
@@ -478,15 +493,27 @@ def dispatch_template_3(params: SimulationParams, state: SimulationState,
     else:
         hour.solar_curtailed = excess_solar
 
-    # Discharge BESS
-    if remaining_load > 0 and not state.bess_disabled_today:
-        hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
-        remaining_load -= hour.bess_to_load
+    # Load serving order depends on dg_load_priority (only outside blackout for DG)
+    dg_available = not is_blackout and state.dg_capacity > 0
 
-    # DG only outside blackout
-    if not is_blackout and remaining_load > 0.001 and state.dg_capacity > 0:
-        remaining_load, charge_power_used = activate_dg(
-            state, params, hour, remaining_load, bess_discharged, charge_power_used)
+    if params.dg_load_priority == 'dg_first' and dg_available:
+        # DG First: Solar -> DG -> BESS -> Unserved
+        if remaining_load > 0.001:
+            remaining_load, charge_power_used = activate_dg(
+                state, params, hour, remaining_load, bess_discharged, charge_power_used)
+
+        if remaining_load > 0 and not state.bess_disabled_today:
+            hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+            remaining_load -= hour.bess_to_load
+    else:
+        # BESS First (default): Solar -> BESS -> DG -> Unserved
+        if remaining_load > 0 and not state.bess_disabled_today:
+            hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+            remaining_load -= hour.bess_to_load
+
+        if dg_available and remaining_load > 0.001:
+            remaining_load, charge_power_used = activate_dg(
+                state, params, hour, remaining_load, bess_discharged, charge_power_used)
 
     return remaining_load, bess_discharged, charge_power_used
 

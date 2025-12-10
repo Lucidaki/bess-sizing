@@ -55,6 +55,7 @@ DEFAULT_WIZARD_STATE = {
         'dg_timing': 'anytime',  # 'anytime', 'day_only', 'night_only', 'custom_blackout'
         'dg_trigger': 'reactive',  # 'reactive', 'soc_based', 'proactive'
         'dg_charges_bess': False,
+        'dg_load_priority': 'bess_first',  # 'bess_first' or 'dg_first'
 
         # SoC thresholds (for soc_based trigger)
         'soc_on_threshold': 30.0,  # %

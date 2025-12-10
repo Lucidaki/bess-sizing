@@ -72,7 +72,7 @@ def render_step_indicator():
                 st.markdown(f"🔒 Step {num}: {label}")
 
 
-def render_template_card(template_id: int):
+def render_template_card(template_id: int, dg_charges_bess: bool = False, dg_load_priority: str = 'bess_first'):
     """Render an informational card showing the inferred template."""
     info = get_template_info(template_id)
 
@@ -84,6 +84,26 @@ def render_template_card(template_id: int):
         border_color = "#3498db"  # Blue
         icon = "⚡"
 
+    # Build merit order based on load priority
+    if not info['dg_enabled']:
+        merit_order = info['merit_order']
+    elif dg_load_priority == 'dg_first':
+        merit_order = "Solar → DG → BESS → Unserved"
+        if dg_charges_bess:
+            merit_order += " + DG→Battery"
+    else:  # bess_first
+        merit_order = "Solar → BESS → DG → Unserved"
+        if dg_charges_bess:
+            merit_order += " + DG→Battery"
+
+    # Build description with DG charging note
+    description = info['description']
+    if info['dg_enabled']:
+        if dg_charges_bess:
+            description += " (Excess DG charges battery)"
+        else:
+            description += " (Battery charges from solar only)"
+
     st.markdown(f"""
     <div style="
         border: 2px solid {border_color};
@@ -92,8 +112,8 @@ def render_template_card(template_id: int):
         background-color: rgba(255,255,255,0.05);
     ">
         <h4 style="margin: 0;">{icon} {info['name']}</h4>
-        <p style="color: #888; margin: 5px 0;">{info['merit_order']}</p>
-        <p style="margin: 5px 0;">{info['description']}</p>
+        <p style="color: #888; margin: 5px 0;">{merit_order}</p>
+        <p style="margin: 5px 0;">{description}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -302,6 +322,28 @@ else:
 
     st.markdown("---")
 
+    # Question 4: Load serving priority
+    st.markdown("#### 4. When DG runs, how should it serve the load?")
+
+    dg_load_priority = st.radio(
+        "Select the load-serving priority:",
+        options=['bess_first', 'dg_first'],
+        format_func=lambda x: {
+            'bess_first': "BESS First — Battery serves load, DG fills remaining gap",
+            'dg_first': "DG First — Generator serves load directly, excess charges BESS"
+        }[x],
+        index=0 if rules.get('dg_load_priority', 'bess_first') == 'bess_first' else 1,
+        key='dg_load_priority_radio'
+    )
+    update_wizard_state('rules', 'dg_load_priority', dg_load_priority)
+
+    if dg_load_priority == 'bess_first':
+        st.caption("Merit order: Solar → BESS → DG → Unserved")
+    else:
+        st.caption("Merit order: Solar → DG → BESS → Unserved")
+
+    st.markdown("---")
+
     # Infer and display template
     template_id = infer_template(
         dg_enabled=True,
@@ -311,7 +353,7 @@ else:
     update_wizard_state('rules', 'inferred_template', template_id)
 
     st.markdown("### 📊 Dispatch Strategy Selected")
-    render_template_card(template_id)
+    render_template_card(template_id, dg_charges_bess, dg_load_priority)
 
 
 st.divider()
@@ -362,3 +404,5 @@ with st.sidebar:
         st.markdown(f"- DG Timing: {rules['dg_timing'].replace('_', ' ').title()}")
         st.markdown(f"- DG Trigger: {rules['dg_trigger'].replace('_', ' ').title()}")
         st.markdown(f"- DG Charges BESS: {'Yes' if rules['dg_charges_bess'] else 'No'}")
+        load_priority_display = "BESS First" if rules.get('dg_load_priority', 'bess_first') == 'bess_first' else "DG First"
+        st.markdown(f"- Load Priority: {load_priority_display}")
