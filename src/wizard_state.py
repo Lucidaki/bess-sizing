@@ -113,6 +113,15 @@ DEFAULT_WIZARD_STATE = {
         },
         'detail_view_config': None,  # Config index for detail view
     },
+
+    # Quick Analysis (alternative to 5-step wizard)
+    'quick_analysis': {
+        'bess_capacity': 100.0,  # MWh
+        'duration': 4,  # hours
+        'dg_capacity': 10.0,  # MW
+        'simulation_results': None,  # Cached HourlyResult list
+        'cache_key': None,  # For change detection
+    },
 }
 
 

@@ -537,6 +537,12 @@ if errors:
 
 col1, col2, col3 = st.columns([1, 1, 1])
 
+with col2:
+    if st.button("⚡ Quick Analysis", disabled=not is_valid, use_container_width=True,
+                 help="Skip the wizard - configure and analyze in one page"):
+        mark_step_completed(1)
+        st.switch_page("pages/13_⚡_Quick_Analysis.py")
+
 with col3:
     if st.button("Next → Dispatch Rules", type="primary", disabled=not is_valid, use_container_width=True):
         mark_step_completed(1)
