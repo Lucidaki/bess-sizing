@@ -609,10 +609,12 @@ if run_btn or (qa_state['simulation_results'] is not None and qa_state['cache_ke
 
         monthly_stats = full_year_df.groupby('month').agg({
             'delivery': lambda x: (x == 'Yes').sum(),
+            'dg_state': lambda x: (x == 'ON').sum(),
             'hour': 'count'
         }).reset_index()
-        monthly_stats.columns = ['month', 'delivery_hours', 'total_hours']
+        monthly_stats.columns = ['month', 'delivery_hours', 'dg_hours', 'total_hours']
         monthly_stats['delivery_pct'] = (monthly_stats['delivery_hours'] / monthly_stats['total_hours'] * 100)
+        monthly_stats['dg_pct'] = (monthly_stats['dg_hours'] / monthly_stats['total_hours'] * 100)
         monthly_stats['month_name'] = monthly_stats['month'].apply(lambda x: month_names[x])
 
         # Create bar chart
@@ -626,7 +628,18 @@ if run_btn or (qa_state['simulation_results'] is not None and qa_state['cache_ke
             marker_color='#2ecc71',
             text=monthly_stats['delivery_pct'].apply(lambda x: f'{x:.0f}%'),
             textposition='outside',
-            hovertemplate='%{x}<br>Delivery: %{y} hrs<br>%{text}<extra></extra>'
+            hovertemplate='%{x}<br>Delivery: %{y} hrs (%{text})<extra></extra>'
+        ))
+
+        # DG hours bars
+        fig_monthly.add_trace(go.Bar(
+            x=monthly_stats['month_name'],
+            y=monthly_stats['dg_hours'],
+            name='DG Hours',
+            marker_color='#e74c3c',
+            text=monthly_stats['dg_pct'].apply(lambda x: f'{x:.0f}%'),
+            textposition='outside',
+            hovertemplate='%{x}<br>DG: %{y} hrs (%{text})<extra></extra>'
         ))
 
         # Reference line for max possible (approximate month hours)
@@ -642,15 +655,65 @@ if run_btn or (qa_state['simulation_results'] is not None and qa_state['cache_ke
         ))
 
         fig_monthly.update_layout(
-            height=300,
+            height=350,
             xaxis_title="Month",
             yaxis_title="Hours",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-            margin=dict(l=50, r=50, t=40, b=50),
-            bargap=0.3
+            margin=dict(l=50, r=50, t=50, b=50),
+            barmode='group',
+            bargap=0.2,
+            bargroupgap=0.1
         )
 
         st.plotly_chart(fig_monthly, use_container_width=True)
+
+        # Monthly breakdown table
+        st.markdown("#### Monthly Breakdown")
+
+        # Calculate detailed monthly stats
+        monthly_detail = full_year_df.groupby('month').agg({
+            'solar_to_load': lambda x: (x > 0).sum(),  # Hours with solar contribution
+            'bess_to_load': lambda x: (x > 0).sum(),   # Hours with BESS contribution
+            'dg_to_load': lambda x: (x > 0).sum(),     # Hours with DG contribution
+            'solar_curtailed': 'sum',                   # Total solar curtailed MWh
+            'solar_mw': 'sum',                          # Total solar generated MWh
+        }).reset_index()
+        monthly_detail.columns = ['month', 'solar_hrs', 'bess_hrs', 'dg_hrs', 'curtailed_mwh', 'total_solar_mwh']
+        monthly_detail['wastage_pct'] = (monthly_detail['curtailed_mwh'] / monthly_detail['total_solar_mwh'] * 100).fillna(0)
+        monthly_detail['month_name'] = monthly_detail['month'].apply(lambda x: month_names[x])
+
+        # Create display DataFrame
+        monthly_table = pd.DataFrame({
+            'Month': monthly_detail['month_name'],
+            'Solar Hrs': monthly_detail['solar_hrs'].astype(int),
+            'BESS Hrs': monthly_detail['bess_hrs'].astype(int),
+            'DG Hrs': monthly_detail['dg_hrs'].astype(int),
+            'Curtailed (MWh)': monthly_detail['curtailed_mwh'].round(1),
+            'Wastage %': monthly_detail['wastage_pct'].round(1),
+        })
+
+        st.dataframe(
+            monthly_table,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'Month': st.column_config.TextColumn('Month'),
+                'Solar Hrs': st.column_config.NumberColumn('Solar Hrs', help='Hours with solar contributing to load'),
+                'BESS Hrs': st.column_config.NumberColumn('BESS Hrs', help='Hours with BESS contributing to load'),
+                'DG Hrs': st.column_config.NumberColumn('DG Hrs', help='Hours with DG contributing to load'),
+                'Curtailed (MWh)': st.column_config.NumberColumn('Curtailed (MWh)', format='%.1f', help='Solar energy curtailed'),
+                'Wastage %': st.column_config.NumberColumn('Wastage %', format='%.1f%%', help='% of solar energy wasted'),
+            }
+        )
+
+        # Download button for monthly breakdown
+        monthly_csv = monthly_table.to_csv(index=False)
+        st.download_button(
+            "📥 Download Monthly Breakdown CSV",
+            data=monthly_csv,
+            file_name=f"monthly_breakdown_{bess_capacity}mwh_{duration}hr.csv",
+            mime="text/csv",
+        )
 
         st.divider()
 
@@ -874,6 +937,15 @@ if run_btn or (qa_state['simulation_results'] is not None and qa_state['cache_ke
             }
         )
 
+        # Download button for 10-year projection
+        projection_csv = projection_df.to_csv(index=False)
+        st.download_button(
+            "📥 Download 10-Year Projection CSV",
+            data=projection_csv,
+            file_name=f"10year_projection_{bess_capacity}mwh_{duration}hr.csv",
+            mime="text/csv",
+        )
+
         # Projection logic explanation
         with st.expander("ℹ️ How are these projections calculated?", expanded=False):
             st.markdown(f"""
@@ -913,6 +985,95 @@ if run_btn or (qa_state['simulation_results'] is not None and qa_state['cache_ke
         else:
             st.info(f"📉 **Year 10 Impact:** Battery at {year10['Capacity (MWh)']:.0f} MWh ({100-18}% of original). "
                     f"Delivery drops by ~{delivery_drop:,} hrs ({delivery_drop_pct:.1f}%).")
+
+        st.divider()
+
+        # ===========================================
+        # 20-YEAR MONTHLY BREAKDOWN CSV
+        # ===========================================
+
+        st.markdown("### 📊 20-Year Monthly Projection Export")
+        st.markdown("Download detailed monthly breakdown with battery degradation projections for 20 years.")
+
+        # Build 20-year monthly projection data
+        monthly_20yr_data = []
+
+        # Get Year 1 monthly baseline from simulation
+        year1_monthly = monthly_detail.copy()
+
+        for year in range(1, 21):
+            capacity_factor = 1 - degradation_rate * (year - 1)
+            effective_capacity = bess_capacity * capacity_factor
+            capacity_loss_pct = (year - 1) * degradation_rate
+
+            for _, month_row in year1_monthly.iterrows():
+                month_idx = month_row['month']
+                month_name = month_row['month_name']
+
+                # Scale metrics based on degradation
+                # Battery-critical hours for this month
+                month_battery_critical = full_year_df[
+                    (full_year_df['month'] == month_idx) &
+                    (full_year_df['bess_to_load'] > 0) &
+                    (full_year_df['delivery'] == 'Yes')
+                ]
+                month_critical_hrs = len(month_battery_critical)
+                month_lost_hrs = int(month_critical_hrs * capacity_loss_pct)
+
+                # Year 1 monthly delivery hours
+                year1_month_delivery = full_year_df[
+                    (full_year_df['month'] == month_idx) &
+                    (full_year_df['delivery'] == 'Yes')
+                ].shape[0]
+
+                year1_month_dg = full_year_df[
+                    (full_year_df['month'] == month_idx) &
+                    (full_year_df['dg_state'] == 'ON')
+                ].shape[0]
+
+                # Apply degradation logic
+                if dg_enabled and dg_capacity > 0:
+                    proj_month_delivery = year1_month_delivery
+                    proj_month_dg = min(hours_per_month[month_idx], year1_month_dg + month_lost_hrs)
+                else:
+                    proj_month_delivery = max(0, year1_month_delivery - month_lost_hrs)
+                    proj_month_dg = 0
+
+                # Scale other metrics
+                proj_solar_hrs = int(month_row['solar_hrs'])  # Solar stays constant
+                proj_bess_hrs = max(0, int(month_row['bess_hrs'] * capacity_factor))
+                proj_dg_hrs = int(month_row['dg_hrs']) if year == 1 else int(proj_month_dg)
+                proj_curtailed = month_row['curtailed_mwh'] * (1 + capacity_loss_pct)
+                proj_wastage_pct = month_row['wastage_pct'] * (1 + capacity_loss_pct)
+
+                monthly_20yr_data.append({
+                    'Year': year,
+                    'Month': month_name,
+                    'Month_Num': month_idx + 1,
+                    'Capacity_MWh': round(effective_capacity, 1),
+                    'Capacity_%': round(capacity_factor * 100, 1),
+                    'Delivery_Hrs': proj_month_delivery,
+                    'Delivery_%': round(proj_month_delivery / hours_per_month[month_idx] * 100, 1),
+                    'Solar_Hrs': proj_solar_hrs,
+                    'BESS_Hrs': proj_bess_hrs,
+                    'DG_Hrs': proj_dg_hrs,
+                    'Curtailed_MWh': round(proj_curtailed, 1),
+                    'Wastage_%': round(proj_wastage_pct, 1),
+                })
+
+        monthly_20yr_df = pd.DataFrame(monthly_20yr_data)
+
+        # Download button
+        monthly_20yr_csv = monthly_20yr_df.to_csv(index=False)
+        st.download_button(
+            "📥 Download 20-Year Monthly Projection CSV",
+            data=monthly_20yr_csv,
+            file_name=f"20year_monthly_projection_{bess_capacity}mwh_{duration}hr.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+        st.caption(f"Contains {len(monthly_20yr_df)} rows (12 months × 20 years) with degradation-adjusted metrics.")
 
 else:
     st.info("👆 Configure your settings above and click **Run Full Year Simulation** to see results.")
