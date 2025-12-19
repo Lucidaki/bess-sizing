@@ -232,6 +232,7 @@ def run_simulation(bess_mwh, duration, dg_mw, template_id, setup, rules, solar_p
         dg_capacity=dg_mw,
         dg_charges_bess=rules.get('dg_charges_bess', False),
         dg_load_priority=rules.get('dg_load_priority', 'bess_first'),
+        dg_takeover_mode=rules.get('dg_takeover_mode', False),
         night_start_hour=rules.get('night_start', 18),
         night_end_hour=rules.get('night_end', 6),
         day_start_hour=rules.get('day_start', 6),
@@ -414,6 +415,21 @@ else:
         )
         update_wizard_state('rules', 'dg_load_priority', dg_load_priority)
 
+        # Question 5: DG Takeover Mode
+        st.markdown("**DG Takeover Mode:**")
+        dg_takeover_mode = st.radio(
+            "Takeover:",
+            options=[False, True],
+            format_func=lambda x: "Yes — DG serves full load, solar goes to BESS" if x else "No — DG fills gap only (standard)",
+            index=1 if rules.get('dg_takeover_mode', False) else 0,
+            key='qa_dg_takeover',
+            label_visibility="collapsed"
+        )
+        update_wizard_state('rules', 'dg_takeover_mode', dg_takeover_mode)
+
+        if dg_takeover_mode:
+            st.caption("When DG runs: DG → Load (full), Solar → BESS. Zero DG curtailment.")
+
         # Template card
         st.markdown("**Dispatch Strategy:**")
         template_id = infer_template(dg_enabled=True, dg_timing=dg_timing, dg_trigger=dg_trigger)
@@ -559,13 +575,18 @@ if run_btn or (qa_state['simulation_results'] is not None and qa_state['cache_ke
             if hourly_results is not None and len(hourly_results) > 0:
                 qa_state['simulation_results'] = hourly_results
                 qa_state['cache_key'] = cache_key
+                # Store profiles for 20-year projection
+                qa_state['solar_profile'] = solar_profile
+                qa_state['load_profile'] = load_profile.tolist()
                 st.success("Simulation complete! Full year (8760 hours) simulated.")
             else:
                 st.error("Simulation failed.")
                 st.stop()
 
-    # Get results
+    # Get results and profiles from state
     hourly_results = qa_state['simulation_results']
+    solar_profile = qa_state.get('solar_profile', [0] * 8760)
+    load_profile = qa_state.get('load_profile', [setup['load_mw']] * 8760)
 
     if hourly_results is not None:
         # Convert to DataFrame
@@ -829,222 +850,115 @@ if run_btn or (qa_state['simulation_results'] is not None and qa_state['cache_ke
         st.divider()
 
         # ===========================================
-        # SECTION 4: 10-YEAR PROJECTION
+        # SECTION 4: MULTI-YEAR PROJECTION (ACTUAL SIMULATIONS)
         # ===========================================
 
-        st.header("4️⃣ 10-Year Projection")
-        st.markdown("Battery degradation impact on system performance over 10 years (2% linear degradation per year).")
+        st.header("4️⃣ Multi-Year Projection")
+        st.markdown("Battery degradation impact on system performance (2% compound degradation per year).")
+        st.caption("**Note:** Running actual simulations for each year with degraded BESS capacity...")
 
-        # Year 1 baseline metrics from simulation
-        year1_delivery = (full_year_df['delivery'] == 'Yes').sum()
-        year1_dg_hours = (full_year_df['dg_state'] == 'ON').sum()
-        year1_curtailed = full_year_df['solar_curtailed'].sum()
-        year1_total_solar = full_year_df['solar_mw'].sum()
-
-        # Calculate delivery contribution percentages from Year 1
-        delivery_df = full_year_df[full_year_df['delivery'] == 'Yes']
-        if len(delivery_df) > 0:
-            # Hours where each source contributed to delivery
-            solar_delivery_hrs = (delivery_df['solar_to_load'] > 0).sum()
-            bess_delivery_hrs = (delivery_df['bess_to_load'] > 0).sum()
-            dg_delivery_hrs = (delivery_df['dg_to_load'] > 0).sum()
-
-            year1_solar_delivery_pct = (solar_delivery_hrs / len(delivery_df) * 100)
-            year1_bess_delivery_pct = (bess_delivery_hrs / len(delivery_df) * 100)
-            year1_dg_delivery_pct = (dg_delivery_hrs / len(delivery_df) * 100)
-        else:
-            year1_solar_delivery_pct = 0
-            year1_bess_delivery_pct = 0
-            year1_dg_delivery_pct = 0
-
-        year1_solar_wastage_pct = (year1_curtailed / year1_total_solar * 100) if year1_total_solar > 0 else 0
-
-        # Calculate battery-critical hours (where battery was essential for delivery)
-        battery_critical = full_year_df[
-            (full_year_df['bess_to_load'] > 0) &
-            (full_year_df['delivery'] == 'Yes')
-        ]
-        battery_critical_hours = len(battery_critical)
-
-        # Estimate annual cycles from Year 1
-        # Cycles = total energy discharged / capacity
-        total_discharge = full_year_df[full_year_df['bess_mw'] < 0]['bess_mw'].abs().sum()
-        year1_cycles = total_discharge / bess_capacity if bess_capacity > 0 else 0
-
-        # Build 10-year projection
-        degradation_rate = 0.02  # 2% per year
-        projection_data = []
-
-        for year in range(1, 11):
-            capacity_factor = 1 - degradation_rate * (year - 1)
-            effective_capacity = bess_capacity * capacity_factor
-            capacity_loss_pct = (year - 1) * degradation_rate
-
-            # Estimate lost delivery hours due to degradation
-            # Simplified model: linear reduction based on battery-critical hours
-            lost_hours = int(battery_critical_hours * capacity_loss_pct)
-
-            # Smart distribution: DG covers if available, else becomes unmet
-            if dg_enabled and dg_capacity > 0:
-                # DG can potentially cover the shortfall
-                proj_delivery = year1_delivery  # Delivery maintained
-                proj_dg_hours = min(8760, year1_dg_hours + lost_hours)  # DG usage increases
-                # DG contribution increases as BESS degrades
-                proj_dg_delivery_pct = min(100, year1_dg_delivery_pct + (capacity_loss_pct * 100))
-                proj_bess_delivery_pct = max(0, year1_bess_delivery_pct - (capacity_loss_pct * 50))
-            else:
-                # No DG - shortfall becomes unmet
-                proj_delivery = max(0, year1_delivery - lost_hours)
-                proj_dg_hours = 0
-                proj_dg_delivery_pct = 0
-                proj_bess_delivery_pct = max(0, year1_bess_delivery_pct * capacity_factor)
-
-            # Scale other metrics
-            proj_cycles = year1_cycles * capacity_factor
-            proj_solar_wastage = year1_solar_wastage_pct * (1 + capacity_loss_pct)  # More wastage as BESS shrinks
-
-            projection_data.append({
-                'Year': year,
-                'Capacity (MWh)': round(effective_capacity, 1),
-                'Delivery Hrs': int(proj_delivery),
-                'Delivery %': round(proj_delivery / 8760 * 100, 1),
-                'DG Hrs': int(proj_dg_hours),
-                'Cycles': int(proj_cycles),
-                '% Solar': round(year1_solar_delivery_pct, 1),  # Solar contribution stays constant
-                '% BESS': round(proj_bess_delivery_pct, 1),
-                '% DG': round(proj_dg_delivery_pct, 1),
-                '% Wastage': round(proj_solar_wastage, 1),
-            })
-
-        projection_df = pd.DataFrame(projection_data)
-
-        # Display table
-        st.dataframe(
-            projection_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                'Year': st.column_config.NumberColumn('Year', format='%d'),
-                'Capacity (MWh)': st.column_config.NumberColumn('Capacity', format='%.1f'),
-                'Delivery Hrs': st.column_config.NumberColumn('Delivery Hrs', format='%d'),
-                'Delivery %': st.column_config.NumberColumn('Delivery %', format='%.1f%%'),
-                'DG Hrs': st.column_config.NumberColumn('DG Hrs', format='%d'),
-                'Cycles': st.column_config.NumberColumn('Cycles', format='%d'),
-                '% Solar': st.column_config.NumberColumn('% Solar', format='%.1f%%', help='% of delivery hours with solar contribution'),
-                '% BESS': st.column_config.NumberColumn('% BESS', format='%.1f%%', help='% of delivery hours with BESS contribution'),
-                '% DG': st.column_config.NumberColumn('% DG', format='%.1f%%', help='% of delivery hours with DG contribution'),
-                '% Wastage': st.column_config.NumberColumn('% Wastage', format='%.1f%%', help='% of solar energy curtailed'),
-            }
-        )
-
-        # Download button for 10-year projection
-        projection_csv = projection_df.to_csv(index=False)
-        st.download_button(
-            "📥 Download 10-Year Projection CSV",
-            data=projection_csv,
-            file_name=f"10year_projection_{bess_capacity}mwh_{duration}hr.csv",
-            mime="text/csv",
-        )
-
-        # Projection logic explanation
-        with st.expander("ℹ️ How are these projections calculated?", expanded=False):
-            st.markdown(f"""
-**Degradation Model:**
-- Battery capacity degrades linearly at **2% per year**
-- Year 1: 100% → Year 10: 82% of original capacity
-
-**Key Year 1 Metrics (from simulation):**
-- Battery-critical hours: **{battery_critical_hours:,}** (hours where BESS was essential for delivery)
-- Annual cycles: **{year1_cycles:.0f}**
-- Solar wastage: **{year1_solar_wastage_pct:.1f}%**
-
-**Projection Logic:**
-1. **Capacity**: `Original × (1 - 0.02 × (Year - 1))`
-2. **Lost Hours**: As battery shrinks, some delivery hours are lost = `Battery-critical hours × Capacity loss %`
-3. **DG Compensation**: {"DG runtime increases to cover lost battery hours" if dg_enabled else "No DG available - lost hours become unmet"}
-4. **Delivery %**: {"Maintained (DG compensates)" if dg_enabled else "Decreases as battery degrades"}
-5. **Cycles**: Decrease proportionally with capacity (less energy to cycle)
-6. **% Wastage**: Increases as smaller battery absorbs less excess solar
-
-**Assumptions:**
-- Solar generation pattern remains constant year-over-year
-- Load profile remains constant
-- DG availability and capacity unchanged
-- No replacement or augmentation of battery
-            """)
-
-        # Summary insights
-        year10 = projection_df[projection_df['Year'] == 10].iloc[0]
-        delivery_drop = year1_delivery - year10['Delivery Hrs']
-        delivery_drop_pct = (delivery_drop / year1_delivery * 100) if year1_delivery > 0 else 0
-
-        if dg_enabled:
-            dg_increase = year10['DG Hrs'] - year1_dg_hours
-            st.info(f"📉 **Year 10 Impact:** Battery at {year10['Capacity (MWh)']:.0f} MWh ({100-18}% of original). "
-                    f"DG runtime increases by ~{dg_increase:,} hrs/year to compensate.")
-        else:
-            st.info(f"📉 **Year 10 Impact:** Battery at {year10['Capacity (MWh)']:.0f} MWh ({100-18}% of original). "
-                    f"Delivery drops by ~{delivery_drop:,} hrs ({delivery_drop_pct:.1f}%).")
-
-        st.divider()
-
-        # ===========================================
-        # 20-YEAR MONTHLY BREAKDOWN CSV
-        # ===========================================
-
-        st.markdown("### 📊 20-Year Monthly Projection Export")
-        st.markdown("Download detailed monthly breakdown with battery degradation projections for 20 years.")
-
-        # Build 20-year monthly projection data
+        # Build 20-year monthly projection data using ACTUAL SIMULATIONS
         monthly_20yr_data = []
+        yearly_projection_data = []  # For 10-year annual table
 
-        # Get Year 1 monthly baseline from simulation
-        year1_monthly = monthly_detail.copy()
+        # Degradation rate and efficiency
+        degradation_rate = 0.02  # 2% per year
+        one_way_eff = (setup['bess_efficiency'] / 100) ** 0.5
+        loss_factor = 1 - one_way_eff
+
+        # Progress bar for 20-year simulation
+        progress_bar = st.progress(0, text="Simulating Year 1...")
+
+        # Store yearly totals for summary
+        yearly_totals = []
 
         for year in range(1, 21):
-            capacity_factor = 1 - degradation_rate * (year - 1)
+            progress_bar.progress(year / 20, text=f"Simulating Year {year}...")
+
+            # Compound degradation
+            capacity_factor = (1 - degradation_rate) ** (year - 1)
             effective_capacity = bess_capacity * capacity_factor
-            capacity_loss_pct = (year - 1) * degradation_rate
+            effective_power = power_mw * capacity_factor
 
-            for _, month_row in year1_monthly.iterrows():
-                month_idx = month_row['month']
-                month_name = month_row['month_name']
+            # Run actual simulation for this year
+            year_results = run_simulation(
+                effective_capacity, duration, dg_capacity,
+                template_id, setup, rules,
+                solar_profile, load_profile
+            )
 
-                # Scale metrics based on degradation
-                # Battery-critical hours for this month
-                month_battery_critical = full_year_df[
-                    (full_year_df['month'] == month_idx) &
-                    (full_year_df['bess_to_load'] > 0) &
-                    (full_year_df['delivery'] == 'Yes')
-                ]
-                month_critical_hrs = len(month_battery_critical)
-                month_lost_hrs = int(month_critical_hrs * capacity_loss_pct)
+            # Convert to DataFrame for analysis
+            year_df = convert_results_to_dataframe(year_results)
 
-                # Year 1 monthly delivery hours
-                year1_month_delivery = full_year_df[
-                    (full_year_df['month'] == month_idx) &
-                    (full_year_df['delivery'] == 'Yes')
-                ].shape[0]
+            # Add month column
+            year_df['month'] = year_df['hour'].apply(
+                lambda h: min(11, (date(2024, 1, 1) + timedelta(hours=h)).month - 1)
+            )
 
-                year1_month_dg = full_year_df[
-                    (full_year_df['month'] == month_idx) &
-                    (full_year_df['dg_state'] == 'ON')
-                ].shape[0]
+            # Calculate year totals for summary
+            year_solar_gen = year_df['solar_mw'].sum()
+            year_dg_gen = year_df['dg_to_load'].sum()
+            year_curtailed = year_df['solar_curtailed'].sum()
+            year_load_met = (year_df['delivery'] == 'Yes').sum() * setup['load_mw']
 
-                # Apply degradation logic
-                if dg_enabled and dg_capacity > 0:
-                    proj_month_delivery = year1_month_delivery
-                    proj_month_dg = min(hours_per_month[month_idx], year1_month_dg + month_lost_hrs)
-                else:
-                    proj_month_delivery = max(0, year1_month_delivery - month_lost_hrs)
-                    proj_month_dg = 0
+            # BESS losses
+            charging_energy = year_df[year_df['bess_mw'] < 0]['bess_mw'].abs().sum()
+            discharging_energy = year_df[year_df['bess_mw'] > 0]['bess_mw'].sum()
+            year_charging_loss = charging_energy * loss_factor
+            year_discharging_loss = discharging_energy * loss_factor
 
-                # Scale other metrics
-                proj_solar_hrs = int(month_row['solar_hrs'])  # Solar stays constant
-                proj_bess_hrs = max(0, int(month_row['bess_hrs'] * capacity_factor))
-                proj_dg_hrs = int(month_row['dg_hrs']) if year == 1 else int(proj_month_dg)
-                proj_curtailed = month_row['curtailed_mwh'] * (1 + capacity_loss_pct)
-                proj_wastage_pct = month_row['wastage_pct'] * (1 + capacity_loss_pct)
+            # Calculate year-level metrics
+            year_delivery_hrs = (year_df['delivery'] == 'Yes').sum()
+            year_dg_hrs = (year_df['dg_state'] == 'ON').sum()
+            year_solar_hrs = (year_df['solar_to_load'] > 0).sum()
+            year_bess_hrs = (year_df['bess_to_load'] > 0).sum()
+            year_wastage_pct = (year_curtailed / year_solar_gen * 100) if year_solar_gen > 0 else 0
+
+            yearly_totals.append({
+                'year': year,
+                'capacity': effective_capacity,
+                'solar_gen': year_solar_gen,
+                'dg_gen': year_dg_gen,
+                'curtailed': year_curtailed,
+                'load_met': year_load_met,
+                'charging_loss': year_charging_loss,
+                'discharging_loss': year_discharging_loss,
+            })
+
+            # Build 10-year/20-year annual projection table data
+            yearly_projection_data.append({
+                'Year': year,
+                'Capacity (MWh)': round(effective_capacity, 1),
+                'Capacity %': round(capacity_factor * 100, 1),
+                'Delivery Hrs': year_delivery_hrs,
+                'Delivery %': round(year_delivery_hrs / 8760 * 100, 1),
+                'DG Hrs': year_dg_hrs,
+                'Solar Hrs': year_solar_hrs,
+                'BESS Hrs': year_bess_hrs,
+                'Curtailed (MWh)': round(year_curtailed, 0),
+                'Wastage %': round(year_wastage_pct, 1),
+                'BESS Loss (MWh)': round(year_charging_loss + year_discharging_loss, 0),
+            })
+
+            # Process each month
+            for month_idx in range(12):
+                month_data = year_df[year_df['month'] == month_idx]
+                month_name = month_names[month_idx]
+
+                # Calculate month metrics from actual simulation
+                month_delivery_hrs = (month_data['delivery'] == 'Yes').sum()
+                month_solar_hrs = (month_data['solar_to_load'] > 0).sum()
+                month_bess_hrs = (month_data['bess_to_load'] > 0).sum()
+                month_dg_hrs = (month_data['dg_state'] == 'ON').sum()
+                month_curtailed = month_data['solar_curtailed'].sum()
+                month_solar_gen = month_data['solar_mw'].sum()
+                month_wastage_pct = (month_curtailed / month_solar_gen * 100) if month_solar_gen > 0 else 0
+
+                # BESS losses for month
+                month_charging = month_data[month_data['bess_mw'] < 0]['bess_mw'].abs().sum()
+                month_discharging = month_data[month_data['bess_mw'] > 0]['bess_mw'].sum()
+                month_charging_loss = month_charging * loss_factor
+                month_discharging_loss = month_discharging * loss_factor
 
                 monthly_20yr_data.append({
                     'Year': year,
@@ -1052,28 +966,178 @@ if run_btn or (qa_state['simulation_results'] is not None and qa_state['cache_ke
                     'Month_Num': month_idx + 1,
                     'Capacity_MWh': round(effective_capacity, 1),
                     'Capacity_%': round(capacity_factor * 100, 1),
-                    'Delivery_Hrs': proj_month_delivery,
-                    'Delivery_%': round(proj_month_delivery / hours_per_month[month_idx] * 100, 1),
-                    'Solar_Hrs': proj_solar_hrs,
-                    'BESS_Hrs': proj_bess_hrs,
-                    'DG_Hrs': proj_dg_hrs,
-                    'Curtailed_MWh': round(proj_curtailed, 1),
-                    'Wastage_%': round(proj_wastage_pct, 1),
+                    'Delivery_Hrs': month_delivery_hrs,
+                    'Delivery_%': round(month_delivery_hrs / hours_per_month[month_idx] * 100, 1),
+                    'Solar_Hrs': month_solar_hrs,
+                    'BESS_Hrs': month_bess_hrs,
+                    'DG_Hrs': month_dg_hrs,
+                    'Curtailed_MWh': round(month_curtailed, 1),
+                    'Wastage_%': round(month_wastage_pct, 1),
+                    'Charging_Loss_MWh': round(month_charging_loss, 2),
+                    'Discharging_Loss_MWh': round(month_discharging_loss, 2),
                 })
 
+        progress_bar.progress(1.0, text="Complete!")
+
+        # Create DataFrames
+        yearly_projection_df = pd.DataFrame(yearly_projection_data)
         monthly_20yr_df = pd.DataFrame(monthly_20yr_data)
 
-        # Download button
+        # ===========================================
+        # 10-YEAR ANNUAL PROJECTION TABLE
+        # ===========================================
+
+        st.markdown("### 📅 10-Year Annual Projection")
+
+        # Display first 10 years
+        ten_year_df = yearly_projection_df[yearly_projection_df['Year'] <= 10].copy()
+
+        st.dataframe(
+            ten_year_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'Year': st.column_config.NumberColumn('Year', format='%d'),
+                'Capacity (MWh)': st.column_config.NumberColumn('Capacity', format='%.1f'),
+                'Capacity %': st.column_config.NumberColumn('Cap %', format='%.1f%%'),
+                'Delivery Hrs': st.column_config.NumberColumn('Delivery Hrs', format='%d'),
+                'Delivery %': st.column_config.NumberColumn('Delivery %', format='%.1f%%'),
+                'DG Hrs': st.column_config.NumberColumn('DG Hrs', format='%d'),
+                'Solar Hrs': st.column_config.NumberColumn('Solar Hrs', format='%d'),
+                'BESS Hrs': st.column_config.NumberColumn('BESS Hrs', format='%d'),
+                'Curtailed (MWh)': st.column_config.NumberColumn('Curtailed', format='%d'),
+                'Wastage %': st.column_config.NumberColumn('Wastage %', format='%.1f%%'),
+                'BESS Loss (MWh)': st.column_config.NumberColumn('BESS Loss', format='%d'),
+            }
+        )
+
+        # Year 10 insight
+        year1_data = yearly_projection_df[yearly_projection_df['Year'] == 1].iloc[0]
+        year10_data = yearly_projection_df[yearly_projection_df['Year'] == 10].iloc[0]
+
+        if dg_enabled:
+            dg_increase = year10_data['DG Hrs'] - year1_data['DG Hrs']
+            st.info(f"📉 **Year 10 Impact:** Battery at {year10_data['Capacity (MWh)']:.0f} MWh ({year10_data['Capacity %']:.1f}% of original). "
+                    f"DG runtime increases by {dg_increase:,.0f} hrs/year.")
+        else:
+            delivery_drop = year1_data['Delivery Hrs'] - year10_data['Delivery Hrs']
+            st.info(f"📉 **Year 10 Impact:** Battery at {year10_data['Capacity (MWh)']:.0f} MWh ({year10_data['Capacity %']:.1f}% of original). "
+                    f"Delivery drops by {delivery_drop:,.0f} hrs/year.")
+
+        # Download buttons in columns
+        col_10yr, col_20yr = st.columns(2)
+
+        with col_10yr:
+            ten_year_csv = ten_year_df.to_csv(index=False)
+            st.download_button(
+                "📥 Download 10-Year Projection",
+                data=ten_year_csv,
+                file_name=f"10year_projection_{bess_capacity}mwh_{duration}hr.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+        with col_20yr:
+            twenty_year_csv = yearly_projection_df.to_csv(index=False)
+            st.download_button(
+                "📥 Download 20-Year Projection",
+                data=twenty_year_csv,
+                file_name=f"20year_projection_{bess_capacity}mwh_{duration}hr.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+        # ===========================================
+        # 20-YEAR MONTHLY BREAKDOWN
+        # ===========================================
+
+        st.divider()
+        st.markdown("### 📊 20-Year Monthly Breakdown")
+        st.caption("Detailed monthly data for all 20 years with degradation effects.")
+
+        # Download button for monthly data
         monthly_20yr_csv = monthly_20yr_df.to_csv(index=False)
         st.download_button(
-            "📥 Download 20-Year Monthly Projection CSV",
+            "📥 Download 20-Year Monthly CSV",
             data=monthly_20yr_csv,
-            file_name=f"20year_monthly_projection_{bess_capacity}mwh_{duration}hr.csv",
+            file_name=f"20year_monthly_{bess_capacity}mwh_{duration}hr.csv",
             mime="text/csv",
             use_container_width=True
         )
 
-        st.caption(f"Contains {len(monthly_20yr_df)} rows (12 months × 20 years) with degradation-adjusted metrics.")
+        st.caption(f"Contains {len(monthly_20yr_df)} rows (12 months × 20 years) with actual simulation results.")
+
+        # ===========================================
+        # 20-YEAR SUMMARY METRICS TABLE
+        # ===========================================
+
+        st.divider()
+        st.markdown("### 📈 20-Year Energy Summary")
+
+        # Calculate totals from yearly data
+        total_solar_gen = sum(y['solar_gen'] for y in yearly_totals)
+        total_dg_gen = sum(y['dg_gen'] for y in yearly_totals)
+        total_curtailed = sum(y['curtailed'] for y in yearly_totals)
+        total_load_met = sum(y['load_met'] for y in yearly_totals)
+        total_charging_loss = sum(y['charging_loss'] for y in yearly_totals)
+        total_discharging_loss = sum(y['discharging_loss'] for y in yearly_totals)
+        total_bess_losses = total_charging_loss + total_discharging_loss
+
+        # Calculate "Missing" per user formula
+        net_supply = total_solar_gen + total_dg_gen - total_curtailed
+        missing = total_load_met - net_supply
+
+        # Display summary metrics
+        summary_cols = st.columns(5)
+        summary_cols[0].metric("Total Solar", f"{total_solar_gen:,.0f} MWh")
+        summary_cols[1].metric("Total DG", f"{total_dg_gen:,.0f} MWh")
+        summary_cols[2].metric("Total Curtailed", f"{total_curtailed:,.0f} MWh")
+        summary_cols[3].metric("Total Load Met", f"{total_load_met:,.0f} MWh")
+        summary_cols[4].metric("BESS Losses", f"{total_bess_losses:,.0f} MWh")
+
+        # Create detailed summary table
+        summary_data = {
+            'Metric': [
+                '1. Total Solar Generated',
+                '2. Total DG Generated',
+                '3. Total Curtailed (Solar Wastage)',
+                '4. Total Load Met',
+                '5. Total BESS Losses',
+                '',
+                'Net Supply (Solar + DG - Curtailed)',
+                'Missing (Load - Net Supply)',
+            ],
+            'Value (MWh)': [
+                f"{total_solar_gen:,.1f}",
+                f"{total_dg_gen:,.1f}",
+                f"{total_curtailed:,.1f}",
+                f"{total_load_met:,.1f}",
+                f"{total_bess_losses:,.1f}",
+                '',
+                f"{net_supply:,.1f}",
+                f"{missing:,.1f}",
+            ],
+            'Notes': [
+                f"{total_solar_gen/20:,.0f} MWh/year avg",
+                f"{total_dg_gen/20:,.0f} MWh/year avg",
+                f"{total_curtailed/total_solar_gen*100:.1f}% wastage rate",
+                f"8,760 × {setup['load_mw']} MW × 20 years",
+                f"Charging: {total_charging_loss:,.0f} + Discharging: {total_discharging_loss:,.0f}",
+                '',
+                'Energy available for consumption',
+                'Should ≈ -BESS Losses (energy balance)',
+            ]
+        }
+
+        summary_df = pd.DataFrame(summary_data)
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+        # Energy balance verification
+        balance_check = abs(missing + total_bess_losses)
+        if balance_check < 1000:
+            st.success(f"✓ Energy balance verified: Missing ({missing:,.0f}) + BESS Losses ({total_bess_losses:,.0f}) = {missing + total_bess_losses:,.0f} MWh (< 1,000 MWh tolerance)")
+        else:
+            st.warning(f"⚠ Energy imbalance detected: {balance_check:,.0f} MWh gap")
 
 else:
     st.info("👆 Configure your settings above and click **Run Full Year Simulation** to see results.")

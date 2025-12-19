@@ -192,6 +192,7 @@ def run_batch_simulation(progress_bar, status_text):
             dg_capacity=config['dg_capacity'],
             dg_charges_bess=rules['dg_charges_bess'],
             dg_load_priority=rules.get('dg_load_priority', 'bess_first'),
+            dg_takeover_mode=rules.get('dg_takeover_mode', False),
             night_start_hour=rules['night_start'],
             night_end_hour=rules['night_end'],
             day_start_hour=rules['day_start'],

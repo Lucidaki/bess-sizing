@@ -56,6 +56,7 @@ DEFAULT_WIZARD_STATE = {
         'dg_trigger': 'reactive',  # 'reactive', 'soc_based', 'proactive'
         'dg_charges_bess': False,
         'dg_load_priority': 'bess_first',  # 'bess_first' or 'dg_first'
+        'dg_takeover_mode': False,  # When True: DG serves full load, solar goes to BESS
 
         # SoC thresholds (for soc_based trigger)
         'soc_on_threshold': 30.0,  # %
@@ -390,6 +391,8 @@ def build_simulation_params() -> Dict[str, Any]:
         # DG
         'dg_enabled': setup['dg_enabled'],
         'dg_charges_bess': rules['dg_charges_bess'],
+        'dg_load_priority': rules['dg_load_priority'],
+        'dg_takeover_mode': rules['dg_takeover_mode'],
 
         # Time windows
         'night_start_hour': rules['night_start'],
