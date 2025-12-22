@@ -344,6 +344,28 @@ else:
 
     st.markdown("---")
 
+    # Question 5: DG Takeover Mode
+    st.markdown("#### 5. When DG runs, should it take over full load?")
+
+    dg_takeover_mode = st.radio(
+        "Select DG takeover behavior:",
+        options=[False, True],
+        format_func=lambda x: {
+            False: "No — DG fills gap only (standard)",
+            True: "Yes — DG serves full load, solar goes to BESS"
+        }[x],
+        index=1 if rules.get('dg_takeover_mode', False) else 0,
+        key='dg_takeover_mode_radio'
+    )
+    update_wizard_state('rules', 'dg_takeover_mode', dg_takeover_mode)
+
+    if dg_takeover_mode:
+        st.caption("When DG runs: DG → Load (full), Solar → BESS. Zero DG curtailment.")
+    else:
+        st.caption("When DG runs: DG fills gap between (Solar + BESS) and Load.")
+
+    st.markdown("---")
+
     # Infer and display template
     template_id = infer_template(
         dg_enabled=True,
@@ -375,11 +397,11 @@ if errors:
 col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
-    if st.button("← Back to Setup", use_container_width=True):
+    if st.button("← Back to Setup", width='stretch'):
         st.switch_page("pages/8_🚀_Step1_Setup.py")
 
 with col3:
-    if st.button("Next → Sizing Range", type="primary", disabled=not is_valid, use_container_width=True):
+    if st.button("Next → Sizing Range", type="primary", disabled=not is_valid, width='stretch'):
         mark_step_completed(2)
         st.switch_page("pages/10_📐_Step3_Sizing.py")
 
@@ -406,3 +428,4 @@ with st.sidebar:
         st.markdown(f"- DG Charges BESS: {'Yes' if rules['dg_charges_bess'] else 'No'}")
         load_priority_display = "BESS First" if rules.get('dg_load_priority', 'bess_first') == 'bess_first' else "DG First"
         st.markdown(f"- Load Priority: {load_priority_display}")
+        st.markdown(f"- Takeover Mode: {'Yes' if rules.get('dg_takeover_mode', False) else 'No'}")

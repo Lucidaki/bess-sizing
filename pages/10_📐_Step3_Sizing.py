@@ -192,6 +192,7 @@ def run_batch_simulation(progress_bar, status_text):
             dg_capacity=config['dg_capacity'],
             dg_charges_bess=rules['dg_charges_bess'],
             dg_load_priority=rules.get('dg_load_priority', 'bess_first'),
+            dg_takeover_mode=rules.get('dg_takeover_mode', False),
             night_start_hour=rules['night_start'],
             night_end_hour=rules['night_end'],
             day_start_hour=rules['day_start'],
@@ -448,7 +449,7 @@ if errors:
 col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
-    if st.button("← Back to Rules", use_container_width=True):
+    if st.button("← Back to Rules", width='stretch'):
         st.switch_page("pages/9_📋_Step2_Rules.py")
 
 with col3:
@@ -456,7 +457,7 @@ with col3:
         "🚀 Run Simulation",
         type="primary",
         disabled=not is_valid,
-        use_container_width=True
+        width='stretch'
     )
 
 if run_button:
