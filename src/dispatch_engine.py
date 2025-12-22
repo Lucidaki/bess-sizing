@@ -46,6 +46,8 @@ class SimulationParams:
     dg_enabled: bool = False
     dg_capacity: float = 0  # MW
     dg_charges_bess: bool = True
+    dg_load_priority: str = 'bess_first'  # 'bess_first' or 'dg_first'
+    dg_takeover_mode: bool = False  # When True: DG serves full load, solar goes to BESS
 
     # Template-specific: Time windows
     night_start_hour: int = 18
@@ -354,6 +356,58 @@ def activate_dg(state: SimulationState, params: SimulationParams, hour: HourlyRe
 # TEMPLATE DISPATCH FUNCTIONS
 # =============================================================================
 
+def check_dg_takeover(params: SimulationParams, state: SimulationState,
+                      hour: HourlyResult, remaining_load: float,
+                      excess_solar: float) -> Tuple[bool, float, bool, float]:
+    """Check if DG takeover mode should activate and execute if needed.
+
+    Returns: (takeover_activated, remaining_load, bess_discharged, charge_power_used)
+    If takeover_activated is True, the template should return immediately.
+    """
+    if not params.dg_takeover_mode or state.dg_capacity <= 0:
+        return False, remaining_load, False, 0
+
+    # Calculate if Solar + BESS can meet full load
+    bess_available = state.soc - state.min_soc_mwh
+    bess_can_provide = min(
+        state.discharge_power_limit,
+        max(0, bess_available) * state.discharge_efficiency
+    )
+    total_green_capacity = hour.solar + bess_can_provide
+
+    if total_green_capacity >= hour.load - 0.001:
+        # Green sources can meet load - no takeover
+        return False, remaining_load, False, 0
+
+    # TAKEOVER: DG serves full load, solar to BESS
+    charge_power_used = 0
+
+    # Reverse the solar_to_load assignment (all solar goes to BESS)
+    total_solar = hour.solar_to_load + excess_solar
+    hour.solar_to_load = 0
+    remaining_load = hour.load  # Reset to full load
+
+    # DG serves full load
+    hour.dg_running = True
+    hour.dg_mode = "TAKEOVER"
+    if not state.dg_was_running:
+        state.total_dg_starts += 1
+    state.total_dg_runtime_hours += 1
+
+    hour.dg_to_load = hour.load  # DG serves exactly the load
+    remaining_load = 0
+    hour.dg_curtailed = 0  # No DG curtailment in takeover mode
+
+    # All solar goes to BESS
+    if total_solar > 0 and not state.bess_disabled_today:
+        hour.solar_to_bess, charge_power_used = charge_bess(state, total_solar, charge_power_used)
+        hour.solar_curtailed = total_solar - hour.solar_to_bess
+    else:
+        hour.solar_curtailed = total_solar
+
+    return True, remaining_load, False, charge_power_used
+
+
 def dispatch_template_0(params: SimulationParams, state: SimulationState,
                         hour: HourlyResult, remaining_load: float,
                         excess_solar: float) -> Tuple[float, bool, float]:
@@ -377,26 +431,104 @@ def dispatch_template_0(params: SimulationParams, state: SimulationState,
 def dispatch_template_1(params: SimulationParams, state: SimulationState,
                         hour: HourlyResult, remaining_load: float,
                         excess_solar: float) -> Tuple[float, bool, float]:
-    """Template 1: Green Priority. Merit: Solar -> BESS -> DG -> Unserved."""
+    """Template 1: Green Priority. Merit order depends on dg_load_priority setting.
+
+    DG Takeover Mode (when dg_takeover_mode=True):
+        - If Solar + BESS cannot meet load, DG takes over full load
+        - Solar is diverted to BESS (not load)
+        - Zero DG curtailment (DG output = Load exactly)
+    """
     bess_discharged = False
     charge_power_used = 0
 
-    # Charge BESS with excess solar
-    if excess_solar > 0 and not state.bess_disabled_today:
-        hour.solar_to_bess, charge_power_used = charge_bess(state, excess_solar, charge_power_used)
-        hour.solar_curtailed = excess_solar - hour.solar_to_bess
+    # Check if DG Takeover Mode is enabled and DG is available
+    if params.dg_takeover_mode and state.dg_capacity > 0:
+        # Calculate if Solar + BESS can meet the FULL load (not just remaining)
+        # Available BESS discharge capacity
+        bess_available = state.soc - state.min_soc_mwh
+        if bess_available > 0:
+            bess_can_provide = min(
+                state.discharge_power_limit,
+                bess_available * state.discharge_efficiency
+            )
+        else:
+            bess_can_provide = 0
+
+        # Total green capacity = solar + BESS discharge potential
+        total_green_capacity = hour.solar + bess_can_provide
+
+        # Check if green sources can meet load
+        if total_green_capacity >= hour.load - 0.001:
+            # GREEN MODE: Solar + BESS can meet load - proceed normally
+            # Charge BESS with excess solar
+            if excess_solar > 0 and not state.bess_disabled_today:
+                hour.solar_to_bess, charge_power_used = charge_bess(state, excess_solar, charge_power_used)
+                hour.solar_curtailed = excess_solar - hour.solar_to_bess
+            else:
+                hour.solar_curtailed = excess_solar
+
+            # Discharge BESS if needed
+            if remaining_load > 0 and not state.bess_disabled_today:
+                hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+                remaining_load -= hour.bess_to_load
+        else:
+            # DG TAKEOVER MODE: Solar + BESS cannot meet load
+            # DG serves full load, solar goes to BESS
+
+            # Reverse the solar_to_load assignment (all solar goes to BESS)
+            total_solar = hour.solar_to_load + excess_solar
+            hour.solar_to_load = 0
+            remaining_load = hour.load  # Reset to full load
+
+            # DG serves full load
+            hour.dg_running = True
+            hour.dg_mode = "TAKEOVER"
+            if not state.dg_was_running:
+                state.total_dg_starts += 1
+            state.total_dg_runtime_hours += 1
+
+            hour.dg_to_load = hour.load  # DG serves exactly the load
+            remaining_load = 0
+            hour.dg_curtailed = 0  # No DG curtailment in takeover mode
+
+            # All solar goes to BESS
+            if total_solar > 0 and not state.bess_disabled_today:
+                hour.solar_to_bess, charge_power_used = charge_bess(state, total_solar, charge_power_used)
+                hour.solar_curtailed = total_solar - hour.solar_to_bess
+            else:
+                hour.solar_curtailed = total_solar
     else:
-        hour.solar_curtailed = excess_solar
+        # STANDARD MODE (no takeover)
+        # Charge BESS with excess solar
+        if excess_solar > 0 and not state.bess_disabled_today:
+            hour.solar_to_bess, charge_power_used = charge_bess(state, excess_solar, charge_power_used)
+            hour.solar_curtailed = excess_solar - hour.solar_to_bess
+        else:
+            hour.solar_curtailed = excess_solar
 
-    # Discharge BESS
-    if remaining_load > 0 and not state.bess_disabled_today:
-        hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
-        remaining_load -= hour.bess_to_load
+        # Load serving order depends on dg_load_priority
+        if params.dg_load_priority == 'dg_first':
+            # DG First: Solar -> DG -> BESS -> Unserved
+            # DG activation first (when load exceeds solar)
+            if remaining_load > 0.001 and state.dg_capacity > 0:
+                remaining_load, charge_power_used = activate_dg(
+                    state, params, hour, remaining_load, bess_discharged, charge_power_used)
 
-    # DG activation (reactive - only when BESS insufficient)
-    if remaining_load > 0.001 and state.dg_capacity > 0:
-        remaining_load, charge_power_used = activate_dg(
-            state, params, hour, remaining_load, bess_discharged, charge_power_used)
+            # Then discharge BESS for any remaining load
+            if remaining_load > 0 and not state.bess_disabled_today:
+                hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+                remaining_load -= hour.bess_to_load
+        else:
+            # BESS First (default): Solar -> BESS -> DG -> Unserved
+            # Discharge BESS first
+            if remaining_load > 0 and not state.bess_disabled_today:
+                hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+                remaining_load -= hour.bess_to_load
+
+            # DG activation (reactive - only when BESS insufficient)
+            if remaining_load > 0.001 and state.dg_capacity > 0:
+                remaining_load, charge_power_used = activate_dg(
+                    state, params, hour, remaining_load, bess_discharged, charge_power_used)
 
     return remaining_load, bess_discharged, charge_power_used
 
@@ -407,6 +539,12 @@ def dispatch_template_2(params: SimulationParams, state: SimulationState,
     """Template 2: DG Night Charge. Night: DG proactive. Day: Green only."""
     bess_discharged = False
     charge_power_used = 0
+
+    # Check for DG takeover mode first
+    takeover, remaining_load, bess_discharged, charge_power_used = check_dg_takeover(
+        params, state, hour, remaining_load, excess_solar)
+    if takeover:
+        return remaining_load, bess_discharged, charge_power_used
 
     is_night = state.is_night_hour[hour.hour_of_day]
     hour.is_night = is_night
@@ -468,6 +606,12 @@ def dispatch_template_3(params: SimulationParams, state: SimulationState,
     bess_discharged = False
     charge_power_used = 0
 
+    # Check for DG takeover mode first
+    takeover, remaining_load, bess_discharged, charge_power_used = check_dg_takeover(
+        params, state, hour, remaining_load, excess_solar)
+    if takeover:
+        return remaining_load, bess_discharged, charge_power_used
+
     is_blackout = state.is_blackout_hour[hour.hour_of_day]
     hour.is_blackout = is_blackout
 
@@ -478,15 +622,27 @@ def dispatch_template_3(params: SimulationParams, state: SimulationState,
     else:
         hour.solar_curtailed = excess_solar
 
-    # Discharge BESS
-    if remaining_load > 0 and not state.bess_disabled_today:
-        hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
-        remaining_load -= hour.bess_to_load
+    # Load serving order depends on dg_load_priority (only outside blackout for DG)
+    dg_available = not is_blackout and state.dg_capacity > 0
 
-    # DG only outside blackout
-    if not is_blackout and remaining_load > 0.001 and state.dg_capacity > 0:
-        remaining_load, charge_power_used = activate_dg(
-            state, params, hour, remaining_load, bess_discharged, charge_power_used)
+    if params.dg_load_priority == 'dg_first' and dg_available:
+        # DG First: Solar -> DG -> BESS -> Unserved
+        if remaining_load > 0.001:
+            remaining_load, charge_power_used = activate_dg(
+                state, params, hour, remaining_load, bess_discharged, charge_power_used)
+
+        if remaining_load > 0 and not state.bess_disabled_today:
+            hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+            remaining_load -= hour.bess_to_load
+    else:
+        # BESS First (default): Solar -> BESS -> DG -> Unserved
+        if remaining_load > 0 and not state.bess_disabled_today:
+            hour.bess_to_load, bess_discharged = discharge_bess(state, params, remaining_load)
+            remaining_load -= hour.bess_to_load
+
+        if dg_available and remaining_load > 0.001:
+            remaining_load, charge_power_used = activate_dg(
+                state, params, hour, remaining_load, bess_discharged, charge_power_used)
 
     return remaining_load, bess_discharged, charge_power_used
 
@@ -497,6 +653,12 @@ def dispatch_template_4(params: SimulationParams, state: SimulationState,
     """Template 4: DG Emergency Only. SoC-triggered, no time restrictions."""
     bess_discharged = False
     charge_power_used = 0
+
+    # Check for DG takeover mode first
+    takeover, remaining_load, bess_discharged, charge_power_used = check_dg_takeover(
+        params, state, hour, remaining_load, excess_solar)
+    if takeover:
+        return remaining_load, bess_discharged, charge_power_used
 
     # SoC-based DG trigger with deadband
     if state.soc <= state.dg_soc_on_mwh:
@@ -563,6 +725,12 @@ def dispatch_template_5(params: SimulationParams, state: SimulationState,
     """Template 5: DG Day Charge. Day: SoC-triggered. Night: Silent."""
     bess_discharged = False
     charge_power_used = 0
+
+    # Check for DG takeover mode first
+    takeover, remaining_load, bess_discharged, charge_power_used = check_dg_takeover(
+        params, state, hour, remaining_load, excess_solar)
+    if takeover:
+        return remaining_load, bess_discharged, charge_power_used
 
     is_day = state.is_day_hour[hour.hour_of_day]
     hour.is_day = is_day
@@ -646,6 +814,12 @@ def dispatch_template_6(params: SimulationParams, state: SimulationState,
     """Template 6: DG Night SoC Trigger. Night: SoC-triggered. Day: Green."""
     bess_discharged = False
     charge_power_used = 0
+
+    # Check for DG takeover mode first
+    takeover, remaining_load, bess_discharged, charge_power_used = check_dg_takeover(
+        params, state, hour, remaining_load, excess_solar)
+    if takeover:
+        return remaining_load, bess_discharged, charge_power_used
 
     is_night = state.is_night_hour[hour.hour_of_day]
     hour.is_night = is_night
